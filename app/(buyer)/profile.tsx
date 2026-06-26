@@ -68,13 +68,15 @@ export default function ProfileScreen() {
       let avatarUrl = user.avatar;
 
       if (newAvatar) {
-        const fileExt = newAvatar.split('.').pop() || 'jpg';
-        const fileName = `${user.id}/avatar.${fileExt}`;
-        const response = await fetch(newAvatar);
-        const blob = await response.blob();
-        await supabase.storage.from('avatars').upload(fileName, blob, { contentType: `image/${fileExt}`, upsert: true });
-        const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
-        avatarUrl = urlData.publicUrl;
+        const fileExt = newAvatar.split('.').pop()?.split('?')[0] || 'jpg';
+        const fileName = `${user.id}/avatar_${Date.now()}.${fileExt}`;
+        const formData = new FormData();
+        formData.append('file', { uri: newAvatar, name: `avatar.${fileExt}`, type: `image/${fileExt}` } as any);
+        const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, formData, { upsert: true });
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
+          avatarUrl = urlData.publicUrl;
+        }
       }
 
       const { error } = await supabase

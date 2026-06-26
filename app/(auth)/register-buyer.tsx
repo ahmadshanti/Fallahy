@@ -81,7 +81,27 @@ export default function RegisterBuyerScreen() {
     setLoading(true);
     try {
       const fullPhone = `${selectedCountry.code}${phone}`;
-      const email = `${phone.replace(/\D/g, '')}_${Date.now()}@example.com`;
+      const cleanPhone = phone.replace(/^0+/, '');
+
+      // Check if phone already exists
+      const { data: existing } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .or(`phone.ilike.%${cleanPhone}%`)
+        .limit(1);
+
+      if (existing && existing.length > 0) {
+        Alert.alert(
+          'الرقم مسجّل مسبقاً',
+          `يوجد حساب باسم "${existing[0].name}" مرتبط بهذا الرقم.\nهل تريد تسجيل الدخول بدلاً من ذلك؟`,
+          [
+            { text: 'تسجيل الدخول', onPress: () => router.push('/(auth)/login') },
+            { text: 'إلغاء', style: 'cancel' },
+          ]
+        );
+        setLoading(false);
+        return;
+      }
 
       const { data: signUpData, error: signUpError } = await supabase.auth.signInAnonymously();
       if (signUpError) {
@@ -100,15 +120,17 @@ export default function RegisterBuyerScreen() {
       let avatarUrl = null;
       if (avatar) {
         try {
-          const fileExt = avatar.split('.').pop() || 'jpg';
-          const fileName = `${userId}/avatar.${fileExt}`;
-          const response = await fetch(avatar);
-          const blob = await response.blob();
-          await supabase.storage.from('avatars').upload(fileName, blob, { contentType: `image/${fileExt}`, upsert: true });
-          const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
-          avatarUrl = urlData.publicUrl;
+          const fileExt = avatar.split('.').pop()?.split('?')[0] || 'jpg';
+          const fileName = `${userId}/avatar_${Date.now()}.${fileExt}`;
+          const formData = new FormData();
+          formData.append('file', { uri: avatar, name: `avatar.${fileExt}`, type: `image/${fileExt}` } as any);
+          const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, formData, { upsert: true });
+          if (!uploadError) {
+            const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
+            avatarUrl = urlData.publicUrl;
+          }
         } catch (e) {
-          // Avatar upload failed, continue without it
+          console.log('Avatar upload error:', e);
         }
       }
 

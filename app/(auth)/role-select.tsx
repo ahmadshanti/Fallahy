@@ -29,7 +29,7 @@ export default function RoleSelectScreen() {
         />
         <View style={{ height: spacing.sm }} />
         <Button
-          title="عندي حساب — تسجيل دخول"
+          title="تسجيل الدخول"
           onPress={() => router.push('/(auth)/login')}
           variant="outlined"
           fullWidth
