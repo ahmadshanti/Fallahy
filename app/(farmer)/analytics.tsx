@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,9 +7,13 @@ import MetricCard from '../../components/farmer/MetricCard';
 import EarningsChart from '../../components/farmer/EarningsChart';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
+import { useAuthStore } from '../../store/authStore';
+import { useFarmerMetrics } from '../../hooks/useEarnings';
 
 export default function AnalyticsScreen() {
   const router = useRouter();
+  const { user } = useAuthStore();
+  const { data: metrics, isLoading } = useFarmerMetrics(user?.id || '');
 
   return (
     <SafeAreaView style={styles.container}>
@@ -22,11 +26,17 @@ export default function AnalyticsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 40 }}>
-        <View style={styles.metricsRow}>
-          <MetricCard icon="eye-outline" value="1,250" label="مشاهدات" />
-          <MetricCard icon="cart-outline" value="89" label="طلبات" />
-          <MetricCard icon="star-outline" value="4.8" label="تقييم" />
-        </View>
+        {isLoading ? (
+          <View style={{ padding: spacing.xl, alignItems: 'center' }}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : (
+          <View style={styles.metricsRow}>
+            <MetricCard icon="eye-outline" value={`${metrics?.totalProducts || 0}`} label="منتجات" />
+            <MetricCard icon="cart-outline" value={`${metrics?.ordersToday || 0}`} label="طلبات اليوم" />
+            <MetricCard icon="star-outline" value="4.8" label="تقييم" />
+          </View>
+        )}
 
         <View style={styles.chartCard}>
           <Text style={styles.chartTitle}>اتجاه المبيعات</Text>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,7 +12,7 @@ import Avatar from '../../../components/ui/Avatar';
 import Button from '../../../components/ui/Button';
 import { colors } from '../../../constants/colors';
 import { radius, spacing } from '../../../constants/spacing';
-import { mockProducts } from '../../../constants/mockData';
+import { useProduct } from '../../../hooks/useProducts';
 import { useCartStore } from '../../../store/cartStore';
 
 const { width, height } = Dimensions.get('window');
@@ -21,9 +21,29 @@ export default function ProductDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const addItem = useCartStore((s) => s.addItem);
-  const product = mockProducts.find((p) => p.id === id) || mockProducts[0];
+  const { data: product, isLoading } = useProduct(id as string);
   const [quantity, setQuantity] = useState(1);
   const [priceType, setPriceType] = useState<'retail' | 'wholesale'>('retail');
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!product) {
+    return (
+      <SafeAreaView style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+        <Ionicons name="alert-circle-outline" size={60} color={colors.textMuted} />
+        <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textMuted, marginTop: spacing.md }}>المنتج غير موجود</Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: spacing.md }}>
+          <Text style={{ fontFamily: 'Cairo_600SemiBold', fontSize: 16, color: colors.primary }}>العودة</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
   const currentPrice = priceType === 'wholesale' ? product.wholesalePrice : product.retailPrice;
 

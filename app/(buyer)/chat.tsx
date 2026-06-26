@@ -18,19 +18,26 @@ const quickQuestions = [
   'كيف أتواصل مع المزارع؟',
 ];
 
-const aiResponses: Record<string, string> = {
-  'متى يوصل طلبي؟': 'طلبك في طريقه إليك! المزارع أبو أحمد يجهز الطلب حالياً. الوصول المتوقع: 11:15 صباحاً.',
-  'شو الفرق بين العضوي والعادي؟': 'المنتج العضوي يُزرع بدون مبيدات كيميائية أو أسمدة صناعية. في فلاحي، المزارعين الموثقين بختم "عضوي" ملتزمين بهاي المعايير.',
-  'كيف أتواصل مع المزارع؟': 'يمكنك التواصل مباشرة مع المزارع عبر واتساب من صفحة الطلب أو من ملف المزارع.',
-};
+function getResponse(text: string): string {
+  switch (text) {
+    case 'متى يوصل طلبي؟':
+      return 'يمكنك تتبع طلبك من صفحة \'طلباتي\'. اضغط على الطلب لمعرفة حالته ووقت الوصول المتوقع.';
+    case 'شو الفرق بين العضوي والعادي؟':
+      return 'المنتج العضوي يُزرع بدون مبيدات كيميائية. المنتجات العضوية عليها علامة \'عضوي\' خضراء في التطبيق.';
+    case 'كيف أتواصل مع المزارع؟':
+      return 'يمكنك التواصل مع المزارع من صفحة المنتج أو من صفحة تتبع الطلب. اضغط على \'اتصل بالمزارع\' أو \'واتساب\'.';
+    default:
+      return 'شكراً لرسالتك! حالياً يمكنك التواصل معنا عبر البريد: support@fallahy.app';
+  }
+}
 
 export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '0',
-      text: 'أهلاً! أنا مساعد فلاحي الذكي\nكيف ممكن أساعدك اليوم؟',
+      text: 'أهلاً! أنا مساعد فلاحي. كيف ممكن أساعدك؟',
       isUser: false,
-      timestamp: '10:00 AM',
+      timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
   const [input, setInput] = useState('');
@@ -48,7 +55,7 @@ export default function ChatScreen() {
     setInput('');
 
     setTimeout(() => {
-      const response = aiResponses[text] || 'شكراً لسؤالك! سأحاول مساعدتك. هل يمكنك توضيح أكثر؟';
+      const response = getResponse(text);
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         text: response,
@@ -56,7 +63,7 @@ export default function ChatScreen() {
         timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, aiMsg]);
-    }, 1000);
+    }, 800);
   };
 
   return (
@@ -137,7 +144,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceDim, alignItems: 'center', justifyContent: 'center',
     marginRight: 6,
   },
-  aiAvatarText: { fontSize: 14 },
   bubble: { maxWidth: '75%', padding: 12, borderRadius: 16 },
   userBubble: {
     backgroundColor: colors.primary,
@@ -182,10 +188,8 @@ const styles = StyleSheet.create({
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: colors.surfaceDim, alignItems: 'center', justifyContent: 'center',
   },
-  micIcon: { fontSize: 20 },
   sendBtn: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
   },
-  sendIcon: { fontSize: 18, color: '#FFFFFF' },
 });

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,19 +8,52 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
-import { mockProducts } from '../../constants/mockData';
+import { useAuthStore } from '../../store/authStore';
+import { useFarmerProducts, useUpdateProduct } from '../../hooks/useProducts';
 
 const durations = ['ساعة واحدة', '3 ساعات', 'يوم كامل'];
 
 export default function FlashDealScreen() {
   const router = useRouter();
-  const myProducts = mockProducts.filter((p) => p.farmerId === 'f1');
-  const [selectedProduct, setSelectedProduct] = useState(myProducts[0]);
+  const { user } = useAuthStore();
+  const { data: myProducts = [], isLoading } = useFarmerProducts(user?.id || '');
+  const updateProduct = useUpdateProduct();
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [dealPrice, setDealPrice] = useState('');
   const [duration, setDuration] = useState('ساعة واحدة');
   const [published, setPublished] = useState(false);
 
-  if (published) {
+  // Default selectedProduct to first in list when data loads
+  useEffect(() => {
+    if (myProducts.length > 0 && !selectedProduct) {
+      setSelectedProduct(myProducts[0]);
+    }
+  }, [myProducts]);
+
+  const handlePublish = async () => {
+    if (!selectedProduct || !dealPrice) return;
+    try {
+      await updateProduct.mutateAsync({
+        id: selectedProduct.id,
+        retail_price: Number(dealPrice),
+      });
+      setPublished(true);
+    } catch (err: any) {
+      Alert.alert('خطأ', err?.message || 'حدث خطأ في نشر العرض');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (published && selectedProduct) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.successContainer}>
@@ -30,6 +63,26 @@ export default function FlashDealScreen() {
             عرض {selectedProduct.name} بسعر ₪{dealPrice} لمدة {duration}
           </Text>
           <Button title="العودة للرئيسية" onPress={() => router.back()} style={{ marginTop: spacing.lg }} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (myProducts.length === 0) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>عرض سريع</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.lg }}>
+          <Ionicons name="flash-outline" size={60} color={colors.textMuted} />
+          <Text style={{ fontFamily: 'Cairo_600SemiBold', fontSize: 16, color: colors.textMuted, marginTop: spacing.md, textAlign: 'center' }}>
+            أضف منتجات أولاً لإنشاء عرض سريع
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -49,13 +102,13 @@ export default function FlashDealScreen() {
         {/* Product Selector */}
         <Text style={styles.label}>اختر المنتج</Text>
         <View style={styles.productList}>
-          {myProducts.map((product) => (
+          {myProducts.map((product: any) => (
             <TouchableOpacity
               key={product.id}
-              style={[styles.productChip, selectedProduct.id === product.id && styles.productChipActive]}
+              style={[styles.productChip, selectedProduct?.id === product.id && styles.productChipActive]}
               onPress={() => setSelectedProduct(product)}
             >
-              <Text style={[styles.productChipText, selectedProduct.id === product.id && styles.productChipTextActive]}>
+              <Text style={[styles.productChipText, selectedProduct?.id === product.id && styles.productChipTextActive]}>
                 {product.name}
               </Text>
             </TouchableOpacity>
@@ -68,7 +121,7 @@ export default function FlashDealScreen() {
           value={dealPrice}
           onChangeText={setDealPrice}
           keyboardType="numeric"
-          placeholder={`أقل من ₪${selectedProduct.retailPrice}`}
+          placeholder={`أقل من ₪${selectedProduct?.retailPrice || 0}`}
         />
 
         {/* Duration */}
@@ -90,21 +143,22 @@ export default function FlashDealScreen() {
         <View style={styles.previewCard}>
           <View style={styles.previewHeader}>
             <Badge label="عرض سريع" variant="savings" />
-            <Text style={styles.previewName}>{selectedProduct.name}</Text>
+            <Text style={styles.previewName}>{selectedProduct?.name || ''}</Text>
           </View>
           <View style={styles.previewPriceRow}>
             {dealPrice && <Text style={styles.previewDealPrice}>₪{dealPrice}</Text>}
-            <Text style={styles.previewOriginalPrice}>₪{selectedProduct.retailPrice}</Text>
+            <Text style={styles.previewOriginalPrice}>₪{selectedProduct?.retailPrice || 0}</Text>
           </View>
           <Text style={styles.previewDuration}>ينتهي خلال: {duration}</Text>
         </View>
 
         <Button
           title="نشر العرض الآن"
-          onPress={() => setPublished(true)}
+          onPress={handlePublish}
           fullWidth
           size="lg"
-          disabled={!dealPrice || Number(dealPrice) >= selectedProduct.retailPrice}
+          disabled={!dealPrice || !selectedProduct || Number(dealPrice) >= (selectedProduct?.retailPrice || 0)}
+          loading={updateProduct.isPending}
         />
       </ScrollView>
     </SafeAreaView>

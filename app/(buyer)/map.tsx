@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,34 +9,47 @@ import Button from '../../components/ui/Button';
 import CategoryFilter from '../../components/buyer/CategoryFilter';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
-import { mockFarmers } from '../../constants/mockData';
+import { useFarmers } from '../../hooks/useFarmers';
 
 const categories = ['الكل', 'خضار', 'فواكه', 'زيوت'];
 
 export default function MapScreen() {
   const router = useRouter();
-  const [selectedFarmer, setSelectedFarmer] = useState(mockFarmers[0]);
+  const { data: farmers = [], isLoading } = useFarmers();
+  const [selectedFarmer, setSelectedFarmer] = useState<any>(null);
   const [selectedCategory, setSelectedCategory] = useState('الكل');
+
+  useEffect(() => {
+    if (farmers.length && !selectedFarmer) {
+      setSelectedFarmer(farmers[0]);
+    }
+  }, [farmers]);
 
   return (
     <View style={styles.container}>
       {/* Map Placeholder */}
       <View style={styles.mapPlaceholder}>
-        <Ionicons name="map-outline" size={60} color={colors.primary} />
-        <Text style={styles.mapText}>خريطة تفاعلية</Text>
-        <Text style={styles.mapSubtext}>سيتم عرض مواقع المزارعين هنا</Text>
+        {isLoading ? (
+          <ActivityIndicator size="large" color={colors.primary} />
+        ) : (
+          <>
+            <Ionicons name="map-outline" size={60} color={colors.primary} />
+            <Text style={styles.mapText}>خريطة تفاعلية</Text>
+            <Text style={styles.mapSubtext}>سيتم عرض مواقع المزارعين هنا</Text>
 
-        {/* Farmer Markers (simulated) */}
-        {mockFarmers.map((farmer, i) => (
-          <TouchableOpacity
-            key={farmer.id}
-            style={[styles.marker, { top: 150 + i * 80, left: 80 + i * 100 }]}
-            onPress={() => setSelectedFarmer(farmer)}
-          >
-            <Ionicons name="location" size={28} color={colors.primary} />
-            <Text style={styles.markerLabel}>{farmer.name.substring(0, 10)}</Text>
-          </TouchableOpacity>
-        ))}
+            {/* Farmer Markers (simulated) */}
+            {farmers.map((farmer, i) => (
+              <TouchableOpacity
+                key={farmer.id}
+                style={[styles.marker, { top: 150 + i * 80, left: 80 + i * 100 }]}
+                onPress={() => setSelectedFarmer(farmer)}
+              >
+                <Ionicons name="location" size={28} color={colors.primary} />
+                <Text style={styles.markerLabel}>{farmer.name.substring(0, 10)}</Text>
+              </TouchableOpacity>
+            ))}
+          </>
+        )}
       </View>
 
       {/* Top Controls */}
@@ -56,21 +69,23 @@ export default function MapScreen() {
       </SafeAreaView>
 
       {/* Bottom Sheet */}
-      <View style={styles.bottomSheet}>
-        <View style={styles.handle} />
-        <View style={styles.farmerInfo}>
-          <Avatar uri={selectedFarmer.avatar} size={50} />
-          <View style={styles.farmerDetails}>
-            <Text style={styles.farmerName}>{selectedFarmer.name}</Text>
-            <RatingStars rating={selectedFarmer.rating} reviewCount={selectedFarmer.reviewCount} />
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Text style={styles.distance}>{selectedFarmer.distance} كم</Text>
-              <Ionicons name="location-outline" size={14} color={colors.textMuted} />
+      {selectedFarmer && (
+        <View style={styles.bottomSheet}>
+          <View style={styles.handle} />
+          <View style={styles.farmerInfo}>
+            <Avatar uri={selectedFarmer.avatar} size={50} />
+            <View style={styles.farmerDetails}>
+              <Text style={styles.farmerName}>{selectedFarmer.name}</Text>
+              <RatingStars rating={selectedFarmer.rating} reviewCount={selectedFarmer.reviewCount} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={styles.distance}>{selectedFarmer.distance} كم</Text>
+                <Ionicons name="location-outline" size={14} color={colors.textMuted} />
+              </View>
             </View>
           </View>
+          <Button title="طلب الآن" onPress={() => router.push(`/(buyer)/farmer/${selectedFarmer.id}`)} fullWidth />
         </View>
-        <Button title="طلب الآن" onPress={() => router.push(`/(buyer)/farmer/${selectedFarmer.id}`)} fullWidth />
-      </View>
+      )}
     </View>
   );
 }

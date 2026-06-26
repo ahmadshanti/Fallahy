@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
+import { supabase } from '../../lib/supabase';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 
@@ -13,12 +14,13 @@ const specialties = ['خضار', 'فواكه', 'زيوت', 'أعشاب'];
 
 export default function RegisterFarmerScreen() {
   const router = useRouter();
-  const login = useAuthStore((s) => s.login);
+  const { user, login } = useAuthStore();
   const [farmName, setFarmName] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [city, setCity] = useState('');
   const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>([]);
   const [idDoc, setIdDoc] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const toggleSpecialty = (s: string) => {
     setSelectedSpecialties((prev) =>
@@ -36,12 +38,57 @@ export default function RegisterFarmerScreen() {
     }
   };
 
-  const handleRegister = () => {
-    login(
-      { id: 'f1', name: farmName, phone: '+970591234567', role: 'farmer', city },
-      'farmer'
-    );
-    router.replace('/(farmer)');
+  const handleRegister = async () => {
+    if (!farmName || !ownerName) return;
+    setLoading(true);
+    try {
+      let userId = user?.id;
+
+      // If no user ID, create anonymous account
+      if (!userId || userId === 'dev-test-user') {
+        const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
+        if (anonError) {
+          Alert.alert('خطأ', anonError.message);
+          setLoading(false);
+          return;
+        }
+        userId = anonData.user?.id;
+        if (!userId) {
+          Alert.alert('خطأ', 'فشل إنشاء الحساب');
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Update profile
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: userId,
+          name: ownerName,
+          farm_name: farmName,
+          city,
+          role: 'farmer',
+          specialty: selectedSpecialties,
+          phone: user?.phone || '',
+        });
+
+      if (error) {
+        Alert.alert('خطأ', error.message);
+        setLoading(false);
+        return;
+      }
+
+      login(
+        { id: userId, name: farmName, phone: user?.phone || '', role: 'farmer', city },
+        'farmer'
+      );
+      router.replace('/(farmer)');
+    } catch (err: any) {
+      Alert.alert('خطأ', err?.message || 'حدث خطأ في التسجيل');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -71,7 +118,7 @@ export default function RegisterFarmerScreen() {
         </View>
 
         <Button
-          title={idDoc ? 'تم رفع الوثيقة ✓' : 'أرفع وثيقة التوثيق'}
+          title={idDoc ? 'تم رفع الوثيقة ✓' : 'أرفق وثيقة التوثيق'}
           onPress={pickImage}
           variant="outlined"
           fullWidth
@@ -84,6 +131,7 @@ export default function RegisterFarmerScreen() {
           fullWidth
           size="lg"
           disabled={!farmName || !ownerName}
+          loading={loading}
         />
       </ScrollView>
     </SafeAreaView>
@@ -94,44 +142,20 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: spacing.lg, paddingBottom: 40 },
   title: {
-    fontFamily: 'Cairo_700Bold',
-    fontSize: 24,
-    color: colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: spacing.xl,
-    writingDirection: 'rtl',
+    fontFamily: 'Cairo_700Bold', fontSize: 24, color: colors.textPrimary,
+    textAlign: 'center', marginBottom: spacing.xl, writingDirection: 'rtl',
   },
   fieldWrapper: { marginBottom: spacing.md },
   label: {
-    fontFamily: 'Cairo_600SemiBold',
-    fontSize: 14,
-    color: colors.textPrimary,
-    marginBottom: spacing.xs,
-    textAlign: 'right',
-    writingDirection: 'rtl',
+    fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.textPrimary,
+    marginBottom: spacing.xs, textAlign: 'right', writingDirection: 'rtl',
   },
-  chipsRow: {
-    flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
+  chipsRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    backgroundColor: colors.surface,
+    paddingHorizontal: 16, paddingVertical: 8, borderRadius: radius.full,
+    borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.surface,
   },
-  chipSelected: {
-    backgroundColor: colors.primary,
-  },
-  chipText: {
-    fontFamily: 'Cairo_600SemiBold',
-    fontSize: 14,
-    color: colors.primary,
-  },
-  chipTextSelected: {
-    color: '#FFFFFF',
-  },
+  chipSelected: { backgroundColor: colors.primary },
+  chipText: { fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.primary },
+  chipTextSelected: { color: '#FFFFFF' },
 });

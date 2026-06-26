@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,16 +12,37 @@ import Button from '../../../components/ui/Button';
 import ProductCard from '../../../components/buyer/ProductCard';
 import { colors } from '../../../constants/colors';
 import { radius, spacing } from '../../../constants/spacing';
-import { mockFarmers, mockProducts } from '../../../constants/mockData';
+import { useFarmer } from '../../../hooks/useFarmers';
+import { useFarmerProducts } from '../../../hooks/useProducts';
 
 const { width } = Dimensions.get('window');
 
 export default function FarmerProfileScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const farmer = mockFarmers.find((f) => f.id === id) || mockFarmers[0];
-  const farmerProducts = mockProducts.filter((p) => p.farmerId === farmer.id);
+  const { data: farmer, isLoading: farmerLoading } = useFarmer(id as string);
+  const { data: farmerProducts = [] } = useFarmerProducts(id as string);
   const [showFullStory, setShowFullStory] = useState(false);
+
+  if (farmerLoading) {
+    return (
+      <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!farmer) {
+    return (
+      <SafeAreaView style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+        <Ionicons name="alert-circle-outline" size={60} color={colors.textMuted} />
+        <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textMuted, marginTop: spacing.md }}>المزارع غير موجود</Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: spacing.md }}>
+          <Text style={{ fontFamily: 'Cairo_600SemiBold', fontSize: 16, color: colors.primary }}>العودة</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -91,7 +112,7 @@ export default function FarmerProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>التخصص</Text>
           <View style={styles.chipsRow}>
-            {farmer.specialty.map((s) => (
+            {farmer.specialty?.map((s: string) => (
               <Badge key={s} label={s} variant="organic" />
             ))}
           </View>
@@ -100,16 +121,22 @@ export default function FarmerProfileScreen() {
         {/* Products */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>منتجاته</Text>
-          <View style={styles.productsGrid}>
-            {farmerProducts.map((product) => (
-              <View key={product.id} style={styles.productItem}>
-                <ProductCard
-                  product={product}
-                  onPress={() => router.push(`/(buyer)/product/${product.id}`)}
-                />
-              </View>
-            ))}
-          </View>
+          {farmerProducts.length === 0 ? (
+            <View style={{ alignItems: 'center', paddingVertical: spacing.lg }}>
+              <Text style={{ fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.textMuted }}>لا توجد منتجات حالياً</Text>
+            </View>
+          ) : (
+            <View style={styles.productsGrid}>
+              {farmerProducts.map((product) => (
+                <View key={product.id} style={styles.productItem}>
+                  <ProductCard
+                    product={product}
+                    onPress={() => router.push(`/(buyer)/product/${product.id}`)}
+                  />
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
 

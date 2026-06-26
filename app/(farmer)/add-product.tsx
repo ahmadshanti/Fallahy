@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, Easing, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,12 +8,16 @@ import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
+import { useAuthStore } from '../../store/authStore';
+import { useCreateProduct } from '../../hooks/useProducts';
 
 const categories = ['خضار', 'فواكه', 'زيوت', 'أعشاب'];
 const units = ['كغ', 'ليتر', 'حبة', 'طرد'];
 
 export default function AddProductScreen() {
   const router = useRouter();
+  const { user } = useAuthStore();
+  const createProduct = useCreateProduct();
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
   const [images, setImages] = useState<string[]>([]);
@@ -62,6 +66,31 @@ export default function AddProductScreen() {
       setRetailPrice('3');
       setWholesalePrice('2.2');
       setQuantity('150');
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!name || !category || !user?.id) return;
+    try {
+      await createProduct.mutateAsync({
+        farmer_id: user.id,
+        name,
+        category,
+        retail_price: Number(retailPrice),
+        wholesale_price: Number(wholesalePrice),
+        market_price: Number(retailPrice) * 1.5,
+        unit,
+        available: Number(quantity),
+        harvest_date: 'اليوم',
+        is_organic: isOrganic,
+        is_fresh: true,
+        is_self_pick: selfPick,
+        is_adoptable: adoptable,
+        savings_percent: Math.round((1 - Number(retailPrice) / (Number(retailPrice) * 1.5)) * 100),
+      });
+      router.back();
+    } catch (err: any) {
+      Alert.alert('خطأ', err?.message || 'حدث خطأ في إضافة المنتج');
     }
   };
 
@@ -170,10 +199,11 @@ export default function AddProductScreen() {
 
         <Button
           title="نشر المنتج"
-          onPress={() => router.back()}
+          onPress={handleSubmit}
           fullWidth
           size="lg"
           disabled={!name || !category}
+          loading={createProduct.isPending}
         />
       </ScrollView>
     </SafeAreaView>

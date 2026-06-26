@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import Badge from '../../components/ui/Badge';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 import { useAuthStore } from '../../store/authStore';
+import { useFarmerMetrics } from '../../hooks/useEarnings';
 
 const menuItems = [
   { label: 'معلومات المزرعة', icon: 'home-outline' },
@@ -20,6 +21,7 @@ const menuItems = [
 export default function FarmerProfileScreen() {
   const router = useRouter();
   const { user, logout } = useAuthStore();
+  const { data: metrics } = useFarmerMetrics(user?.id || '');
 
   const handleLogout = () => {
     logout();
@@ -30,14 +32,14 @@ export default function FarmerProfileScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
         <View style={styles.profileHeader}>
-          <Avatar uri="https://i.pravatar.cc/100?img=12" size={80} />
-          <Text style={styles.farmName}>{user?.name || 'مزرعة أبو أحمد'}</Text>
+          <Avatar uri={user?.avatar || 'https://i.pravatar.cc/100?img=12'} size={80} />
+          <Text style={styles.farmName}>{user?.name || ''}</Text>
           <Badge label="مزارع موثّق ✓" variant="verified" />
         </View>
 
         <View style={styles.statsRow}>
           <View style={styles.stat}>
-            <Text style={styles.statValue}>12</Text>
+            <Text style={styles.statValue}>{metrics?.totalProducts || 0}</Text>
             <Text style={styles.statLabel}>منتج</Text>
           </View>
           <View style={styles.statDivider} />
@@ -47,7 +49,7 @@ export default function FarmerProfileScreen() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.stat}>
-            <Text style={styles.statValue}>340</Text>
+            <Text style={styles.statValue}>{metrics?.ordersToday || 0}</Text>
             <Text style={styles.statLabel}>طلب</Text>
           </View>
         </View>

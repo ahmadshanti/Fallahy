@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,14 +10,25 @@ import FarmerCard from '../../components/buyer/FarmerCard';
 import SectionHeader from '../../components/buyer/SectionHeader';
 import { colors } from '../../constants/colors';
 import { spacing } from '../../constants/spacing';
-import { mockProducts, mockFarmers, mockPriceTicker, mockSavings } from '../../constants/mockData';
 import { useCartStore } from '../../store/cartStore';
+import { useAuthStore } from '../../store/authStore';
+import { useProducts } from '../../hooks/useProducts';
+import { useFarmers } from '../../hooks/useFarmers';
+import { usePriceTicker } from '../../hooks/useSavings';
+import { useBuyerSavings } from '../../hooks/useSavings';
 
 const { width } = Dimensions.get('window');
 
 export default function BuyerHomeScreen() {
   const router = useRouter();
   const cartItems = useCartStore((s) => s.items);
+  const { user } = useAuthStore();
+  const { data: products = [], isLoading: productsLoading } = useProducts({ limit: 10 });
+  const { data: farmers = [], isLoading: farmersLoading } = useFarmers();
+  const { data: priceTicker = [] } = usePriceTicker();
+  const { data: savings } = useBuyerSavings(user?.id || '');
+
+  const savingsAmount = savings?.totalSaved || 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -26,7 +37,7 @@ export default function BuyerHomeScreen() {
         <View style={styles.topBar}>
           <View style={styles.topBarRight}>
             <Ionicons name="location-outline" size={18} color={colors.primary} />
-            <Text style={styles.locationText}>رام الله، فلسطين</Text>
+            <Text style={styles.locationText}>{user?.city || 'فلسطين'}</Text>
           </View>
           <View style={styles.topBarLeft}>
             <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/(buyer)/cart')}>
@@ -60,14 +71,16 @@ export default function BuyerHomeScreen() {
 
         {/* Price Ticker */}
         <View style={{ marginTop: spacing.md }}>
-          <PriceTicker items={mockPriceTicker} />
+          <PriceTicker items={priceTicker} />
         </View>
 
         {/* Savings Banner */}
         <TouchableOpacity style={styles.savingsBanner} onPress={() => router.push('/(buyer)/profile')}>
           <Ionicons name="chevron-back" size={20} color="rgba(255,255,255,0.5)" />
           <View style={styles.savingsContent}>
-            <Text style={styles.savingsTitle}>وفّرت {mockSavings.thisMonth} شيكل هاد الشهر</Text>
+            <Text style={styles.savingsTitle}>
+              {savingsAmount > 0 ? `وفّرت ${savingsAmount} شيكل هاد الشهر` : 'ابدأ بالتسوق'}
+            </Text>
             <Text style={styles.savingsSubtitle}>أنت بطل الاقتصاد الزراعي!</Text>
           </View>
           <View style={styles.savingsIcon}>
@@ -77,32 +90,44 @@ export default function BuyerHomeScreen() {
 
         {/* Most Ordered */}
         <SectionHeader title="الأكثر طلباً" actionText="عرض الكل" onAction={() => router.push('/(buyer)/explore')} />
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.horizontalList}
-        >
-          {mockProducts.map((product) => (
-            <View key={product.id} style={{ marginLeft: spacing.sm }}>
-              <ProductCard
-                product={product}
-                onPress={() => router.push(`/(buyer)/product/${product.id}`)}
-              />
-            </View>
-          ))}
-        </ScrollView>
+        {productsLoading ? (
+          <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.lg }} />
+        ) : products.length === 0 ? (
+          <View style={{ alignItems: 'center', paddingVertical: spacing.lg }}>
+            <Text style={{ fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.textMuted }}>لا توجد منتجات حالياً</Text>
+          </View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.horizontalList}
+          >
+            {products.map((product) => (
+              <View key={product.id} style={{ marginLeft: spacing.sm }}>
+                <ProductCard
+                  product={product}
+                  onPress={() => router.push(`/(buyer)/product/${product.id}`)}
+                />
+              </View>
+            ))}
+          </ScrollView>
+        )}
 
         {/* Nearby Farmers */}
         <SectionHeader title="مزارعون قريبون منك" actionText="عرض الكل" onAction={() => router.push('/(buyer)/map')} />
-        <View style={styles.farmersList}>
-          {mockFarmers.map((farmer) => (
-            <FarmerCard
-              key={farmer.id}
-              farmer={farmer}
-              onPress={() => router.push(`/(buyer)/farmer/${farmer.id}`)}
-            />
-          ))}
-        </View>
+        {farmersLoading ? (
+          <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.lg }} />
+        ) : (
+          <View style={styles.farmersList}>
+            {farmers.map((farmer) => (
+              <FarmerCard
+                key={farmer.id}
+                farmer={farmer}
+                onPress={() => router.push(`/(buyer)/farmer/${farmer.id}`)}
+              />
+            ))}
+          </View>
+        )}
 
         <View style={{ height: 20 }} />
       </ScrollView>

@@ -1,15 +1,18 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AlertCard from '../../components/farmer/AlertCard';
 import { colors } from '../../constants/colors';
 import { spacing } from '../../constants/spacing';
-import { mockAlerts } from '../../constants/mockData';
+import { useAuthStore } from '../../store/authStore';
+import { useFarmerAlerts } from '../../hooks/useAlerts';
 
 export default function FarmerAlertsScreen() {
   const router = useRouter();
+  const { user } = useAuthStore();
+  const { data: alerts = [], isLoading } = useFarmerAlerts(user?.id || '');
 
   return (
     <SafeAreaView style={styles.container}>
@@ -21,15 +24,30 @@ export default function FarmerAlertsScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.list}>
-        {mockAlerts.map((alert) => (
-          <AlertCard
-            key={alert.id}
-            alert={alert}
-            onAction={() => router.push(alert.actionRoute as any)}
-          />
-        ))}
-      </ScrollView>
+      {isLoading ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.list}>
+          {alerts.length === 0 ? (
+            <View style={{ alignItems: 'center', paddingTop: 80 }}>
+              <Ionicons name="notifications-off-outline" size={60} color={colors.textMuted} />
+              <Text style={{ fontFamily: 'Cairo_600SemiBold', fontSize: 16, color: colors.textMuted, marginTop: spacing.md }}>
+                لا توجد تنبيهات حالياً
+              </Text>
+            </View>
+          ) : (
+            alerts.map((alert) => (
+              <AlertCard
+                key={alert.id}
+                alert={alert}
+                onAction={() => alert.actionRoute ? router.push(alert.actionRoute as any) : undefined}
+              />
+            ))
+          )}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }

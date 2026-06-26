@@ -2,72 +2,175 @@ import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity,
   ScrollView, KeyboardAvoidingView, Platform, Keyboard,
-  TouchableWithoutFeedback, Modal, FlatList,
+  TouchableWithoutFeedback, Modal, FlatList, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
+import { useSupabaseAuth } from '../../hooks/useSupabaseAuth';
+import { supabase } from '../../lib/supabase';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 
 const countryCodes = [
-  { code: '+970', flag: '🇵🇸', name: 'فلسطين' },
-  { code: '+962', flag: '🇯🇴', name: 'الأردن' },
-  { code: '+966', flag: '🇸🇦', name: 'السعودية' },
-  { code: '+971', flag: '🇦🇪', name: 'الإمارات' },
-  { code: '+961', flag: '🇱🇧', name: 'لبنان' },
-  { code: '+20', flag: '🇪🇬', name: 'مصر' },
-  { code: '+964', flag: '🇮🇶', name: 'العراق' },
-  { code: '+968', flag: '🇴🇲', name: 'عُمان' },
-  { code: '+974', flag: '🇶🇦', name: 'قطر' },
-  { code: '+965', flag: '🇰🇼', name: 'الكويت' },
-  { code: '+973', flag: '🇧🇭', name: 'البحرين' },
-  { code: '+90', flag: '🇹🇷', name: 'تركيا' },
-  { code: '+1', flag: '🇺🇸', name: 'أمريكا' },
+  { code: '+970', flag: '\u{1F1F5}\u{1F1F8}', name: 'فلسطين' },
+  { code: '+962', flag: '\u{1F1EF}\u{1F1F4}', name: 'الأردن' },
+  { code: '+966', flag: '\u{1F1F8}\u{1F1E6}', name: 'السعودية' },
+  { code: '+971', flag: '\u{1F1E6}\u{1F1EA}', name: 'الإمارات' },
+  { code: '+961', flag: '\u{1F1F1}\u{1F1E7}', name: 'لبنان' },
+  { code: '+20', flag: '\u{1F1EA}\u{1F1EC}', name: 'مصر' },
+  { code: '+964', flag: '\u{1F1EE}\u{1F1F6}', name: 'العراق' },
+  { code: '+968', flag: '\u{1F1F4}\u{1F1F2}', name: 'عُمان' },
+  { code: '+974', flag: '\u{1F1F6}\u{1F1E6}', name: 'قطر' },
+  { code: '+965', flag: '\u{1F1F0}\u{1F1FC}', name: 'الكويت' },
+  { code: '+973', flag: '\u{1F1E7}\u{1F1ED}', name: 'البحرين' },
+  { code: '+90', flag: '\u{1F1F9}\u{1F1F7}', name: 'تركيا' },
+  { code: '+1', flag: '\u{1F1FA}\u{1F1F8}', name: 'أمريكا' },
 ];
 
 export default function LoginScreen() {
   const router = useRouter();
   const { role } = useLocalSearchParams<{ role: string }>();
   const login = useAuthStore((s) => s.login);
+  const { sendOtp, verifyOtp, getProfile } = useSupabaseAuth();
   const [phone, setPhone] = useState('');
   const [showOTP, setShowOTP] = useState(false);
   const [otp, setOtp] = useState(['', '', '', '']);
   const [loading, setLoading] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState(countryCodes[0]);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const otpRefs = useRef<(TextInput | null)[]>([]);
 
-  const handleSendOTP = () => {
-    if (phone.length >= 9) {
-      Keyboard.dismiss();
-      setShowOTP(true);
+  const fullPhone = `${selectedCountry.code}${phone}`;
+
+  const handleSendOTP = async () => {
+    if (phone.length < 9) return;
+    Keyboard.dismiss();
+    setSendingOtp(true);
+    try {
+      // Note: Supabase phone OTP requires an SMS provider (e.g., Twilio) to be configured.
+      // For testing, you can add test phone numbers in the Supabase dashboard under
+      // Authentication > Phone Auth > Test Phone Numbers.
+      const { error } = await sendOtp(fullPhone);
+      if (error) {
+        Alert.alert('خطأ', error.message);
+      } else {
+        setShowOTP(true);
+      }
+    } catch (err: any) {
+      Alert.alert('خطأ', err?.message || 'حدث خطأ في إرسال رمز التحقق');
+    } finally {
+      setSendingOtp(false);
     }
   };
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
+    const otpCode = otp.join('');
     setLoading(true);
     Keyboard.dismiss();
-    setTimeout(() => {
+    try {
       const userRole = (role === 'farmer' ? 'farmer' : 'buyer') as 'buyer' | 'farmer';
-      login(
-        {
-          id: '1',
-          name: userRole === 'farmer' ? 'مزرعة أبو أحمد' : 'أحمد محمد',
-          phone: `${selectedCountry.code}${phone}`,
-          role: userRole,
-        },
-        userRole
-      );
-      setLoading(false);
-      if (userRole === 'farmer') {
-        router.replace('/(farmer)');
-      } else {
-        router.replace('/(buyer)');
+
+      // Dev shortcut: OTP "1234" creates a real Supabase account using email auth
+      if (otpCode === '1234') {
+        const devEmail = `${phone.replace(/\D/g, '')}@example.com`;
+        const devPassword = `fallahy_${phone}`;
+
+        // Try sign in first, then sign up if new user
+        let session = null;
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: devEmail,
+          password: devPassword,
+        });
+
+        if (signInData?.session) {
+          session = signInData.session;
+        } else {
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+            email: devEmail,
+            password: devPassword,
+            options: { data: { name: '', role: userRole, phone: fullPhone } },
+          });
+          if (signUpError) {
+            Alert.alert('خطأ', signUpError.message);
+            setLoading(false);
+            return;
+          }
+          session = signUpData?.session;
+        }
+
+        if (session?.user) {
+          const { data: profile } = await getProfile(session.user.id);
+          if (profile?.name) {
+            login({ id: profile.id, name: profile.name, phone: profile.phone || fullPhone, role: profile.role as 'buyer' | 'farmer', avatar: profile.avatar_url, city: profile.city, address: profile.address }, profile.role as 'buyer' | 'farmer');
+            setLoading(false);
+            router.replace(profile.role === 'farmer' ? '/(farmer)' : '/(buyer)');
+          } else {
+            login({ id: session.user.id, name: '', phone: fullPhone, role: userRole }, userRole);
+            setLoading(false);
+            router.push(userRole === 'farmer' ? '/(auth)/register-farmer' : '/(auth)/register-buyer');
+          }
+        } else {
+          Alert.alert('خطأ', 'فشل إنشاء الحساب');
+          setLoading(false);
+        }
+        return;
       }
-    }, 1000);
+
+      const { data, error } = await verifyOtp(fullPhone, otpCode);
+      if (error) {
+        Alert.alert('خطأ', error.message);
+        setLoading(false);
+        return;
+      }
+
+      const session = data?.session;
+      if (!session?.user) {
+        Alert.alert('خطأ', 'فشل التحقق، يرجى المحاولة مرة أخرى');
+        setLoading(false);
+        return;
+      }
+
+      // Check if the user already has a profile
+      const { data: profile } = await getProfile(session.user.id);
+
+      if (profile?.name) {
+        // Existing user with a complete profile
+        const existingRole = (profile.role as 'buyer' | 'farmer') || userRole;
+        login(
+          {
+            id: profile.id,
+            name: profile.name,
+            phone: profile.phone || fullPhone,
+            role: existingRole,
+            avatar: profile.avatar_url,
+            city: profile.city,
+            address: profile.address,
+          },
+          existingRole
+        );
+        setLoading(false);
+        if (existingRole === 'farmer') {
+          router.replace('/(farmer)');
+        } else {
+          router.replace('/(buyer)');
+        }
+      } else {
+        // New user — navigate to registration screen
+        setLoading(false);
+        if (userRole === 'farmer') {
+          router.push('/(auth)/register-farmer');
+        } else {
+          router.push('/(auth)/register-buyer');
+        }
+      }
+    } catch (err: any) {
+      Alert.alert('خطأ', err?.message || 'حدث خطأ في التحقق');
+      setLoading(false);
+    }
   };
 
   const handleOTPChange = (text: string, index: number) => {
@@ -133,6 +236,7 @@ export default function LoginScreen() {
                   fullWidth
                   size="lg"
                   disabled={phone.length < 9}
+                  loading={sendingOtp}
                 />
               ) : (
                 <>

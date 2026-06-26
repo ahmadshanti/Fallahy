@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,10 +11,15 @@ import EarningsChart from '../../components/farmer/EarningsChart';
 import SectionHeader from '../../components/buyer/SectionHeader';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
-import { mockAlerts } from '../../constants/mockData';
+import { useAuthStore } from '../../store/authStore';
+import { useFarmerAlerts } from '../../hooks/useAlerts';
+import { useFarmerMetrics } from '../../hooks/useEarnings';
 
 export default function FarmerDashboard() {
   const router = useRouter();
+  const { user } = useAuthStore();
+  const { data: alerts = [] } = useFarmerAlerts(user?.id || '');
+  const { data: metrics } = useFarmerMetrics(user?.id || '');
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -27,29 +32,33 @@ export default function FarmerDashboard() {
           <View style={styles.headerRight}>
             <View style={styles.headerText}>
               <Text style={styles.greeting}>صباح الخير</Text>
-              <Text style={styles.farmName}>مزرعة أبو أحمد</Text>
+              <Text style={styles.farmName}>{user?.name || 'مزرعتي'}</Text>
             </View>
-            <Avatar uri="https://i.pravatar.cc/100?img=12" size={60} />
+            <Avatar uri={user?.avatar || 'https://i.pravatar.cc/100?img=12'} size={60} />
           </View>
         </View>
 
         {/* Metrics */}
         <View style={styles.metricsRow}>
-          <MetricCard icon="cube-outline" value="8" label="الطلبات اليوم" />
-          <MetricCard icon="wallet-outline" value="240 ₪" label="المبيعات" />
+          <MetricCard icon="cube-outline" value={`${metrics?.ordersToday || 0}`} label="الطلبات اليوم" />
+          <MetricCard icon="wallet-outline" value={`${metrics?.salesToday || 0} ₪`} label="المبيعات" />
           <MetricCard icon="star-outline" value="4.8" label="التقييم" />
         </View>
 
         {/* Smart Alerts */}
         <SectionHeader title="تنبيهات ذكية" />
         <View style={styles.alertsSection}>
-          {mockAlerts.map((alert) => (
-            <AlertCard
-              key={alert.id}
-              alert={alert}
-              onAction={() => router.push(alert.actionRoute as any)}
-            />
-          ))}
+          {alerts.length === 0 ? (
+            <Text style={styles.emptyText}>لا توجد تنبيهات حالياً</Text>
+          ) : (
+            alerts.map((alert) => (
+              <AlertCard
+                key={alert.id}
+                alert={alert}
+                onAction={() => alert.actionRoute ? router.push(alert.actionRoute as any) : undefined}
+              />
+            ))
+          )}
         </View>
 
         {/* Quick Actions */}
@@ -113,6 +122,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row', paddingHorizontal: spacing.md, gap: spacing.sm,
   },
   alertsSection: { paddingHorizontal: spacing.md },
+  emptyText: {
+    fontFamily: 'Cairo_400Regular', fontSize: 14, color: colors.textMuted,
+    textAlign: 'center', paddingVertical: spacing.md,
+  },
   actionsGrid: { paddingHorizontal: spacing.md },
   actionsRow: { flexDirection: 'row', marginBottom: spacing.sm },
   analyticsCard: {

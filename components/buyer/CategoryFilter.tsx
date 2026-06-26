@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { ScrollView, TouchableOpacity, Text, StyleSheet, I18nManager } from 'react-native';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 
@@ -34,7 +34,7 @@ export default function CategoryFilter({ categories, selected, onSelect }: Categ
 
 const styles = StyleSheet.create({
   scroll: {
-    marginVertical: spacing.sm,
+    marginVertical: spacing.xs,
   },
   container: {
     paddingHorizontal: spacing.md,
@@ -42,20 +42,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
   },
   chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderRadius: radius.full,
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.primary,
+    borderColor: colors.border,
   },
   chipActive: {
     backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   chipText: {
     fontFamily: 'Cairo_600SemiBold',
     fontSize: 13,
-    color: colors.primary,
+    color: colors.textSecondary,
   },
   chipTextActive: {
     color: '#FFFFFF',

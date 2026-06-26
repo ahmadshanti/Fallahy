@@ -1,28 +1,21 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Avatar from '../../components/ui/Avatar';
 import EarningsChart from '../../components/farmer/EarningsChart';
 import Badge from '../../components/ui/Badge';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
+import { useAuthStore } from '../../store/authStore';
+import { useFarmerEarnings, useFarmerTransactions } from '../../hooks/useEarnings';
 
 const periods = ['اليوم', 'الأسبوع', 'الشهر'];
 
-const transactions = [
-  { id: '1', buyer: 'أحمد محمد', avatar: 'https://i.pravatar.cc/100?img=33', amount: 45, date: 'اليوم 10:30 AM', items: 'بندورة × 2, خيار × 1' },
-  { id: '2', buyer: 'سامي خالد', avatar: 'https://i.pravatar.cc/100?img=45', amount: 28, date: 'اليوم 9:15 AM', items: 'بطاطا × 3' },
-  { id: '3', buyer: 'ليلى أحمد', avatar: 'https://i.pravatar.cc/100?img=48', amount: 67, date: 'أمس', items: 'زيت زيتون × 2' },
-];
-
-const periodTotals: Record<string, number> = {
-  'اليوم': 240,
-  'الأسبوع': 1450,
-  'الشهر': 5200,
-};
-
 export default function EarningsScreen() {
   const [period, setPeriod] = useState('اليوم');
+  const { user } = useAuthStore();
+  const { data: earnings, isLoading: earningsLoading } = useFarmerEarnings(user?.id || '', period);
+  const { data: transactions = [], isLoading: txLoading } = useFarmerTransactions(user?.id || '');
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -44,8 +37,14 @@ export default function EarningsScreen() {
 
         {/* Total */}
         <View style={styles.totalCard}>
-          <Text style={styles.totalAmount}>{periodTotals[period]} ₪</Text>
-          <Badge label="↑ 23% مقارنة بالفترة السابقة" variant="fresh" />
+          {earningsLoading ? (
+            <ActivityIndicator size="large" color={colors.primary} />
+          ) : (
+            <>
+              <Text style={styles.totalAmount}>{earnings?.total || 0} ₪</Text>
+              <Badge label="↑ 23% مقارنة بالفترة السابقة" variant="fresh" />
+            </>
+          )}
         </View>
 
         {/* Chart */}
@@ -55,19 +54,27 @@ export default function EarningsScreen() {
 
         {/* Transactions */}
         <Text style={styles.sectionTitle}>المعاملات الأخيرة</Text>
-        {transactions.map((tx) => (
-          <View key={tx.id} style={styles.txCard}>
-            <View style={styles.txRow}>
-              <Text style={styles.txAmount}>+₪{tx.amount}</Text>
-              <View style={styles.txInfo}>
-                <Text style={styles.txBuyer}>{tx.buyer}</Text>
-                <Text style={styles.txItems}>{tx.items}</Text>
-                <Text style={styles.txDate}>{tx.date}</Text>
-              </View>
-              <Avatar uri={tx.avatar} size={40} />
-            </View>
+        {txLoading ? (
+          <View style={{ padding: spacing.lg, alignItems: 'center' }}>
+            <ActivityIndicator size="small" color={colors.primary} />
           </View>
-        ))}
+        ) : transactions.length === 0 ? (
+          <Text style={styles.emptyText}>لا توجد معاملات بعد</Text>
+        ) : (
+          transactions.map((tx: any) => (
+            <View key={tx.id} style={styles.txCard}>
+              <View style={styles.txRow}>
+                <Text style={styles.txAmount}>+₪{tx.amount}</Text>
+                <View style={styles.txInfo}>
+                  <Text style={styles.txBuyer}>{tx.buyer}</Text>
+                  <Text style={styles.txItems}>{tx.items}</Text>
+                  <Text style={styles.txDate}>{tx.date}</Text>
+                </View>
+                <Avatar uri={tx.avatar || ''} size={40} />
+              </View>
+            </View>
+          ))
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -107,6 +114,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textPrimary,
     textAlign: 'right', writingDirection: 'rtl',
     paddingHorizontal: spacing.md, marginBottom: spacing.sm,
+  },
+  emptyText: {
+    fontFamily: 'Cairo_400Regular', fontSize: 14, color: colors.textMuted,
+    textAlign: 'center', paddingVertical: spacing.lg,
   },
   txCard: {
     backgroundColor: colors.surface, borderRadius: radius.xl,

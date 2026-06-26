@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
@@ -7,22 +7,30 @@ import Avatar from '../../components/ui/Avatar';
 import Button from '../../components/ui/Button';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
+import { useAuthStore } from '../../store/authStore';
+import { useFarmerOrders, useUpdateOrderStatus } from '../../hooks/useOrders';
 
 const tabs = ['جديدة', 'جارية', 'مكتملة'];
 
-const farmerOrders = [
-  {
-    id: 'ORD-001', buyerName: 'أحمد محمد', buyerAvatar: 'https://i.pravatar.cc/100?img=33',
-    items: ['بندورة × 2', 'خيار × 1'], total: 12.0, time: '10:30 AM', status: 'new',
-  },
-  {
-    id: 'ORD-002', buyerName: 'سامي خالد', buyerAvatar: 'https://i.pravatar.cc/100?img=45',
-    items: ['بطاطا × 3'], total: 7.5, time: '10:15 AM', status: 'active',
-  },
-];
+const statusMap: Record<string, string> = {
+  'جديدة': 'received',
+  'جارية': 'preparing',
+  'مكتملة': 'delivered',
+};
 
 export default function FarmerOrdersScreen() {
   const [activeTab, setActiveTab] = useState('جديدة');
+  const { user } = useAuthStore();
+  const { data: orders = [], isLoading } = useFarmerOrders(user?.id || '');
+  const updateStatus = useUpdateOrderStatus();
+
+  const filteredOrders = orders.filter((order: any) => {
+    const tabStatus = statusMap[activeTab];
+    if (activeTab === 'جديدة') return order.status === 'received';
+    if (activeTab === 'جارية') return order.status === 'preparing' || order.status === 'on_the_way';
+    if (activeTab === 'مكتملة') return order.status === 'delivered' || order.status === 'cancelled';
+    return true;
+  });
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -40,37 +48,64 @@ export default function FarmerOrdersScreen() {
         ))}
       </View>
 
-      <View style={styles.listContainer}>
-        <FlashList
-          data={farmerOrders}
+      {isLoading ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : (
+        <View style={styles.listContainer}>
+          <FlashList
+            data={filteredOrders}
 
-          renderItem={({ item }) => (
-            <View style={styles.orderCard}>
-              <View style={styles.orderHeader}>
-                <View style={styles.buyerInfo}>
-                  <Text style={styles.buyerName}>{item.buyerName}</Text>
-                  <Text style={styles.orderTime}>{item.time}</Text>
+            renderItem={({ item }: { item: any }) => (
+              <View style={styles.orderCard}>
+                <View style={styles.orderHeader}>
+                  <View style={styles.buyerInfo}>
+                    <Text style={styles.buyerName}>{item.buyerName || 'مشتري'}</Text>
+                    <Text style={styles.orderTime}>{item.placedAt}</Text>
+                  </View>
+                  <Avatar uri={item.buyerAvatar || ''} size={44} />
                 </View>
-                <Avatar uri={item.buyerAvatar} size={44} />
+                <Text style={styles.orderItems}>
+                  {(item.items || []).map((i: any) => `${i.name} × ${i.qty}`).join('، ')}
+                </Text>
+                <Text style={styles.orderTotal}>₪{(item.total || 0).toFixed(2)}</Text>
+                {item.status === 'received' && (
+                  <View style={styles.actionsRow}>
+                    <Button
+                      title="رفض ✗"
+                      onPress={() => updateStatus.mutate({ orderId: item.orderUuid, status: 'cancelled' })}
+                      variant="danger"
+                      size="sm"
+                      style={{ flex: 1 }}
+                    />
+                    <Button
+                      title="قبول ✓"
+                      onPress={() => updateStatus.mutate({ orderId: item.orderUuid, status: 'preparing' })}
+                      size="sm"
+                      style={{ flex: 1 }}
+                    />
+                  </View>
+                )}
+                <TouchableOpacity style={styles.whatsappLink}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Ionicons name="logo-whatsapp" size={16} color="#25D366" />
+                    <Text style={styles.whatsappText}>تواصل مع المشتري</Text>
+                  </View>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.orderItems}>{item.items.join('، ')}</Text>
-              <Text style={styles.orderTotal}>₪{item.total.toFixed(2)}</Text>
-              {item.status === 'new' && (
-                <View style={styles.actionsRow}>
-                  <Button title="رفض ✗" onPress={() => {}} variant="danger" size="sm" style={{ flex: 1 }} />
-                  <Button title="قبول ✓" onPress={() => {}} size="sm" style={{ flex: 1 }} />
-                </View>
-              )}
-              <TouchableOpacity style={styles.whatsappLink}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Ionicons name="logo-whatsapp" size={16} color="#25D366" />
-                  <Text style={styles.whatsappText}>تواصل مع المشتري</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-          )}
-        />
-      </View>
+            )}
+            ListEmptyComponent={
+              <View style={{ alignItems: 'center', paddingTop: 80 }}>
+                <Ionicons name="clipboard-outline" size={60} color={colors.textMuted} />
+                <Text style={{ fontFamily: 'Cairo_600SemiBold', fontSize: 16, color: colors.textMuted, marginTop: spacing.md }}>
+                  لا توجد طلبات في هذا القسم
+                </Text>
+              </View>
+            }
+          />
+        </View>
+      )}
     </SafeAreaView>
   );
 }

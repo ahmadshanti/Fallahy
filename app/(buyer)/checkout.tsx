@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,19 +7,45 @@ import Button from '../../components/ui/Button';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 import { useCartStore } from '../../store/cartStore';
+import { useAuthStore } from '../../store/authStore';
+import { useCreateOrder } from '../../hooks/useOrders';
 
 export default function CheckoutScreen() {
   const router = useRouter();
   const { items, total, savings, clear } = useCartStore();
+  const { user } = useAuthStore();
+  const createOrder = useCreateOrder();
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [deliveryTime, setDeliveryTime] = useState('asap');
+  const [deliveryType, setDeliveryType] = useState('delivery');
 
   const cartTotal = total();
   const cartSavings = savings();
 
-  const handleConfirm = () => {
-    clear();
-    router.replace('/(buyer)/order-tracking/ORD-82739');
+  const handleConfirm = async () => {
+    if (!user) return;
+    try {
+      const farmerId = items[0]?.product.farmerId;
+      const result = await createOrder.mutateAsync({
+        buyer_id: user.id,
+        farmer_id: farmerId,
+        total: cartTotal,
+        delivery_type: deliveryType,
+        payment_method: paymentMethod,
+        address: user.address || 'رام الله',
+        items: items.map((i) => ({
+          product_id: i.product.id,
+          product_name: i.product.name,
+          quantity: i.quantity,
+          price: i.priceType === 'wholesale' ? i.product.wholesalePrice : i.product.retailPrice,
+          price_type: i.priceType,
+        })),
+      });
+      clear();
+      router.replace(`/(buyer)/order-tracking/${result.orderNumber}`);
+    } catch (error) {
+      Alert.alert('خطأ', 'حدث خطأ أثناء إنشاء الطلب. حاول مرة أخرى.');
+    }
   };
 
   return (
@@ -41,7 +67,7 @@ export default function CheckoutScreen() {
           </View>
           <View style={styles.addressCard}>
             <Ionicons name="location-outline" size={20} color={colors.primary} />
-            <Text style={styles.addressText}>رام الله، شارع الإرسال</Text>
+            <Text style={styles.addressText}>{user?.address || 'رام الله، شارع الإرسال'}</Text>
           </View>
         </View>
 
@@ -111,7 +137,13 @@ export default function CheckoutScreen() {
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <Button title="تأكيد الطلب" onPress={handleConfirm} fullWidth size="lg" />
+        <Button
+          title={createOrder.isPending ? 'جاري الإرسال...' : 'تأكيد الطلب'}
+          onPress={handleConfirm}
+          fullWidth
+          size="lg"
+          disabled={createOrder.isPending}
+        />
       </View>
     </SafeAreaView>
   );

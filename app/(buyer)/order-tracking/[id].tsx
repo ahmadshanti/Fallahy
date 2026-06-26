@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,12 +7,12 @@ import OrderStatusStep from '../../../components/buyer/OrderStatusStep';
 import Button from '../../../components/ui/Button';
 import { colors } from '../../../constants/colors';
 import { radius, spacing } from '../../../constants/spacing';
-import { mockOrders } from '../../../constants/mockData';
+import { useOrder } from '../../../hooks/useOrders';
 
 export default function OrderTrackingScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const order = mockOrders[0];
+  const { data: order, isLoading } = useOrder(id as string);
 
   const steps = [
     { title: 'تم استلام طلبك', subtitle: 'تم تأكيد الطلب بنجاح', status: 'done' as const, timestamp: '10:30 AM' },
@@ -20,6 +20,26 @@ export default function OrderTrackingScreen() {
     { title: 'في الطريق إليك', subtitle: 'يتم تعيين مندوب التوصيل', status: 'pending' as const },
     { title: 'وصل', subtitle: 'بالهناء والشفاء', status: 'pending' as const },
   ];
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!order) {
+    return (
+      <SafeAreaView style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+        <Ionicons name="alert-circle-outline" size={60} color={colors.textMuted} />
+        <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textMuted, marginTop: spacing.md }}>الطلب غير موجود</Text>
+        <TouchableOpacity onPress={() => router.replace('/(buyer)/orders')} style={{ marginTop: spacing.md }}>
+          <Text style={{ fontFamily: 'Cairo_600SemiBold', fontSize: 16, color: colors.primary }}>العودة للطلبات</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -39,7 +59,7 @@ export default function OrderTrackingScreen() {
             <Text style={styles.statusTitle}>تتبع حالة طلبك</Text>
           </View>
           <View style={styles.arrivalRow}>
-            <Text style={styles.arrivalTime}>{order.estimatedArrival}</Text>
+            <Text style={styles.arrivalTime}>{order.estimatedArrival || '--'}</Text>
             <Text style={styles.arrivalLabel}>وقت الوصول المتوقع</Text>
           </View>
         </View>
@@ -80,14 +100,14 @@ export default function OrderTrackingScreen() {
         {/* Order Summary */}
         <View style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>ملخص الطلب</Text>
-          {order.items.map((item, i) => (
+          {order.items?.map((item: any, i: number) => (
             <View key={i} style={styles.summaryRow}>
               <Text style={styles.summaryPrice}>₪{(item.price * item.qty).toFixed(2)}</Text>
               <Text style={styles.summaryName}>{item.name} × {item.qty}</Text>
             </View>
           ))}
           <View style={styles.totalRow}>
-            <Text style={styles.totalValue}>₪{order.total.toFixed(2)}</Text>
+            <Text style={styles.totalValue}>₪{order.total?.toFixed(2) || '0.00'}</Text>
             <Text style={styles.totalLabel}>الإجمالي</Text>
           </View>
         </View>

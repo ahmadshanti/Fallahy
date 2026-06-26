@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,7 +8,7 @@ import CategoryFilter from '../../components/buyer/CategoryFilter';
 import ProductCard from '../../components/buyer/ProductCard';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
-import { mockProducts } from '../../constants/mockData';
+import { useProducts } from '../../hooks/useProducts';
 
 const categories = ['الكل', 'خضار', 'فواكه', 'زيوت', 'أعشاب', 'بقوليات'];
 
@@ -20,22 +20,11 @@ export default function ExploreScreen() {
   const [organicOnly, setOrganicOnly] = useState(false);
   const [availableOnly, setAvailableOnly] = useState(false);
 
-  const filteredProducts = useMemo(() => {
-    let filtered = mockProducts;
-    if (selectedCategory !== 'الكل') {
-      filtered = filtered.filter((p) => p.category === selectedCategory);
-    }
-    if (organicOnly) {
-      filtered = filtered.filter((p) => p.isOrganic);
-    }
-    if (availableOnly) {
-      filtered = filtered.filter((p) => p.available > 0);
-    }
-    if (search) {
-      filtered = filtered.filter((p) => p.name.includes(search) || p.farmerName.includes(search));
-    }
-    return filtered;
-  }, [selectedCategory, organicOnly, availableOnly, search]);
+  const { data: products = [], isLoading } = useProducts({
+    category: selectedCategory !== 'الكل' ? selectedCategory : undefined,
+    organic: organicOnly || undefined,
+    search: search || undefined,
+  });
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -103,28 +92,30 @@ export default function ExploreScreen() {
 
       {/* Products Grid */}
       <View style={styles.listContainer}>
-        <FlashList
-          data={filteredProducts}
-          numColumns={2}
-
-
-          contentContainerStyle={{ paddingHorizontal: spacing.md }}
-          ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-          renderItem={({ item }) => (
-            <View style={{ flex: 1, paddingHorizontal: 4 }}>
-              <ProductCard
-                product={item}
-                onPress={() => router.push(`/(buyer)/product/${item.id}`)}
-              />
-            </View>
-          )}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="search-outline" size={48} color={colors.textMuted} />
-              <Text style={styles.emptyText}>لا توجد منتجات مطابقة</Text>
-            </View>
-          }
-        />
+        {isLoading ? (
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 60 }} />
+        ) : (
+          <FlashList
+            data={products}
+            numColumns={2}
+            contentContainerStyle={{ paddingHorizontal: spacing.md }}
+            ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
+            renderItem={({ item }) => (
+              <View style={{ flex: 1, paddingHorizontal: 4 }}>
+                <ProductCard
+                  product={item}
+                  onPress={() => router.push(`/(buyer)/product/${item.id}`)}
+                />
+              </View>
+            )}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Ionicons name="search-outline" size={48} color={colors.textMuted} />
+                <Text style={styles.emptyText}>لا توجد منتجات مطابقة</Text>
+              </View>
+            }
+          />
+        )}
       </View>
     </SafeAreaView>
   );

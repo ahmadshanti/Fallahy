@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,11 +8,31 @@ import { Image } from 'expo-image';
 import Button from '../../components/ui/Button';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
-import { mockProducts } from '../../constants/mockData';
+import { useAuthStore } from '../../store/authStore';
+import { useFarmerProducts } from '../../hooks/useProducts';
 
 export default function FarmerProductsScreen() {
   const router = useRouter();
-  const myProducts = mockProducts.filter((p) => p.farmerId === 'f1');
+  const { user } = useAuthStore();
+  const { data: myProducts = [], isLoading } = useFarmerProducts(user?.id || '');
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>منتجاتي</Text>
+          <Button
+            title="+ إضافة منتج"
+            onPress={() => router.push('/(farmer)/add-product')}
+            size="sm"
+          />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

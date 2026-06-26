@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,7 +8,8 @@ import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
-import { mockOrders } from '../../constants/mockData';
+import { useAuthStore } from '../../store/authStore';
+import { useBuyerOrders } from '../../hooks/useOrders';
 
 const tabs = ['الكل', 'جارية', 'مكتملة', 'ملغية'];
 
@@ -29,6 +30,8 @@ const statusColors: Record<string, string> = {
 export default function OrdersScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('الكل');
+  const { user } = useAuthStore();
+  const { data: orders = [], isLoading } = useBuyerOrders(user?.id || '');
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -48,39 +51,42 @@ export default function OrdersScreen() {
       </View>
 
       <View style={styles.listContainer}>
-        <FlashList
-          data={mockOrders}
-
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.orderCard}
-              onPress={() => router.push(`/(buyer)/order-tracking/${item.id}`)}
-            >
-              <View style={styles.orderHeader}>
-                <View style={[styles.statusBadge, { backgroundColor: statusColors[item.status] + '20' }]}>
-                  <Text style={[styles.statusText, { color: statusColors[item.status] }]}>
-                    {statusLabels[item.status]}
-                  </Text>
+        {isLoading ? (
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 60 }} />
+        ) : (
+          <FlashList
+            data={orders}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.orderCard}
+                onPress={() => router.push(`/(buyer)/order-tracking/${item.id}`)}
+              >
+                <View style={styles.orderHeader}>
+                  <View style={[styles.statusBadge, { backgroundColor: (statusColors[item.status] || '#999') + '20' }]}>
+                    <Text style={[styles.statusText, { color: statusColors[item.status] || '#999' }]}>
+                      {statusLabels[item.status] || item.status}
+                    </Text>
+                  </View>
+                  <Text style={styles.orderId}>#{item.id}</Text>
                 </View>
-                <Text style={styles.orderId}>#{item.id}</Text>
+                <Text style={styles.orderItems}>
+                  {item.items.map((i: any) => `${i.name} × ${i.qty}`).join('، ')}
+                </Text>
+                <View style={styles.orderFooter}>
+                  <Button title="إعادة الطلب" onPress={() => {}} variant="outlined" size="sm" />
+                  <Text style={styles.orderTotal}>₪{item.total.toFixed(2)}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Ionicons name="cube-outline" size={60} color={colors.textMuted} />
+                <Text style={styles.emptyTitle}>لا توجد طلبات</Text>
+                <Text style={styles.emptySubtitle}>ابدأ بطلب خضار طازجة!</Text>
               </View>
-              <Text style={styles.orderItems}>
-                {item.items.map((i) => `${i.name} × ${i.qty}`).join('، ')}
-              </Text>
-              <View style={styles.orderFooter}>
-                <Button title="إعادة الطلب" onPress={() => {}} variant="outlined" size="sm" />
-                <Text style={styles.orderTotal}>₪{item.total.toFixed(2)}</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="cube-outline" size={60} color={colors.textMuted} />
-              <Text style={styles.emptyTitle}>لا توجد طلبات</Text>
-              <Text style={styles.emptySubtitle}>ابدأ بطلب خضار طازجة!</Text>
-            </View>
-          }
-        />
+            }
+          />
+        )}
       </View>
     </SafeAreaView>
   );
