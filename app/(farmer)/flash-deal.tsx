@@ -5,45 +5,60 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
-import Badge from '../../components/ui/Badge';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 import { useAuthStore } from '../../store/authStore';
-import { useFarmerProducts, useUpdateProduct } from '../../hooks/useProducts';
+import { getProductsByFarmer, updateProduct } from '../../lib/products';
 
 const durations = ['ساعة واحدة', '3 ساعات', 'يوم كامل'];
 
 export default function FlashDealScreen() {
   const router = useRouter();
-  const { user } = useAuthStore();
-  const { data: myProducts = [], isLoading } = useFarmerProducts(user?.id || '');
-  const updateProduct = useUpdateProduct();
+  const farmerId = useAuthStore((s) => s.farmerId);
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [dealPrice, setDealPrice] = useState('');
   const [duration, setDuration] = useState('ساعة واحدة');
   const [published, setPublished] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
-  // Default selectedProduct to first in list when data loads
   useEffect(() => {
-    if (myProducts.length > 0 && !selectedProduct) {
-      setSelectedProduct(myProducts[0]);
+    if (farmerId) loadProducts();
+  }, [farmerId]);
+
+  const loadProducts = async () => {
+    if (!farmerId) return;
+    setLoading(true);
+    try {
+      const data = await getProductsByFarmer(farmerId);
+      setProducts(data);
+      if (data.length > 0) {
+        setSelectedProduct(data[0]);
+      }
+    } catch (err) {
+      console.log('Error loading products:', err);
+    } finally {
+      setLoading(false);
     }
-  }, [myProducts]);
+  };
 
   const handlePublish = async () => {
     if (!selectedProduct || !dealPrice) return;
+    setPublishing(true);
     try {
-      await updateProduct.mutateAsync({
-        id: selectedProduct.id,
-        retail_price: Number(dealPrice),
+      await updateProduct(selectedProduct.id, {
+        discount_percent: Math.round((1 - Number(dealPrice) / (selectedProduct.retail_price || 1)) * 100),
       });
       setPublished(true);
     } catch (err: any) {
       Alert.alert('خطأ', err?.message || 'حدث خطأ في نشر العرض');
+    } finally {
+      setPublishing(false);
     }
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -58,9 +73,9 @@ export default function FlashDealScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.successContainer}>
           <Ionicons name="checkmark-circle" size={80} color={colors.primary} />
-          <Text style={styles.successTitle}>تم نشر العرض بنجاح!</Text>
+          <Text style={styles.successTitle}>تم نشر العرض بنجاح</Text>
           <Text style={styles.successSubtitle}>
-            عرض {selectedProduct.name} بسعر ₪{dealPrice} لمدة {duration}
+            عرض {selectedProduct.name} بسعر {dealPrice} ₪ لمدة {duration}
           </Text>
           <Button title="العودة للرئيسية" onPress={() => router.back()} style={{ marginTop: spacing.lg }} />
         </View>
@@ -68,7 +83,7 @@ export default function FlashDealScreen() {
     );
   }
 
-  if (myProducts.length === 0) {
+  if (products.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
@@ -102,7 +117,7 @@ export default function FlashDealScreen() {
         {/* Product Selector */}
         <Text style={styles.label}>اختر المنتج</Text>
         <View style={styles.productList}>
-          {myProducts.map((product: any) => (
+          {products.map((product: any) => (
             <TouchableOpacity
               key={product.id}
               style={[styles.productChip, selectedProduct?.id === product.id && styles.productChipActive]}
@@ -121,7 +136,7 @@ export default function FlashDealScreen() {
           value={dealPrice}
           onChangeText={setDealPrice}
           keyboardType="numeric"
-          placeholder={`أقل من ₪${selectedProduct?.retailPrice || 0}`}
+          placeholder={`أقل من ${selectedProduct?.retail_price || 0} ₪`}
         />
 
         {/* Duration */}
@@ -142,12 +157,15 @@ export default function FlashDealScreen() {
         <Text style={styles.label}>معاينة العرض</Text>
         <View style={styles.previewCard}>
           <View style={styles.previewHeader}>
-            <Badge label="عرض سريع" variant="savings" />
+            <View style={styles.flashBadge}>
+              <Ionicons name="flash" size={14} color={colors.secondary} />
+              <Text style={styles.flashBadgeText}>عرض سريع</Text>
+            </View>
             <Text style={styles.previewName}>{selectedProduct?.name || ''}</Text>
           </View>
           <View style={styles.previewPriceRow}>
-            {dealPrice && <Text style={styles.previewDealPrice}>₪{dealPrice}</Text>}
-            <Text style={styles.previewOriginalPrice}>₪{selectedProduct?.retailPrice || 0}</Text>
+            {dealPrice ? <Text style={styles.previewDealPrice}>{dealPrice} ₪</Text> : null}
+            <Text style={styles.previewOriginalPrice}>{selectedProduct?.retail_price || 0} ₪</Text>
           </View>
           <Text style={styles.previewDuration}>ينتهي خلال: {duration}</Text>
         </View>
@@ -157,8 +175,8 @@ export default function FlashDealScreen() {
           onPress={handlePublish}
           fullWidth
           size="lg"
-          disabled={!dealPrice || !selectedProduct || Number(dealPrice) >= (selectedProduct?.retailPrice || 0)}
-          loading={updateProduct.isPending}
+          disabled={!dealPrice || !selectedProduct || Number(dealPrice) >= (selectedProduct?.retail_price || 0)}
+          loading={publishing}
         />
       </ScrollView>
     </SafeAreaView>
@@ -171,7 +189,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
   },
-  backIcon: { fontSize: 24 },
   headerTitle: { fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textPrimary },
   scroll: { padding: spacing.md, paddingBottom: 40 },
   label: {
@@ -207,6 +224,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center',
   },
   previewName: { fontFamily: 'Cairo_700Bold', fontSize: 16, color: colors.textPrimary },
+  flashBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#FFF8E1', borderRadius: radius.full,
+    paddingHorizontal: 10, paddingVertical: 3,
+  },
+  flashBadgeText: { fontFamily: 'Cairo_600SemiBold', fontSize: 11, color: colors.secondary },
   previewPriceRow: {
     flexDirection: 'row-reverse', gap: spacing.sm, marginTop: spacing.sm, alignItems: 'baseline',
   },
@@ -222,7 +245,6 @@ const styles = StyleSheet.create({
   successContainer: {
     flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg,
   },
-  successEmoji: { fontSize: 80 },
   successTitle: {
     fontFamily: 'Cairo_700Bold', fontSize: 24, color: colors.primary,
     marginTop: spacing.md,

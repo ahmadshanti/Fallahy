@@ -1,137 +1,339 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  FlatList,
+  ActivityIndicator,
+  StatusBar,
+  Image,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { FlashList } from '@shopify/flash-list';
-import Badge from '../../components/ui/Badge';
-import Button from '../../components/ui/Button';
 import { colors } from '../../constants/colors';
-import { radius, spacing } from '../../constants/spacing';
 import { useAuthStore } from '../../store/authStore';
-import { useBuyerOrders } from '../../hooks/useOrders';
+import { getOrdersByBuyer } from '../../lib/orders';
+import { Order } from '../../types';
 
-const tabs = ['الكل', 'جارية', 'مكتملة', 'ملغية'];
+const FILTER_TABS = [
+  { key: 'all', label: 'الكل' },
+  { key: 'active', label: 'جارية' },
+  { key: 'completed', label: 'مكتملة' },
+  { key: 'rejected', label: 'مرفوضة' },
+];
 
-const statusLabels: Record<string, string> = {
-  received: 'تم الاستلام',
-  preparing: 'جارية',
-  on_the_way: 'في الطريق',
-  delivered: 'مكتملة',
-};
-
-const statusColors: Record<string, string> = {
-  received: '#2196F3',
-  preparing: '#2196F3',
-  on_the_way: '#FF9800',
-  delivered: colors.success,
+const STATUS_MAP: Record<string, { label: string; color: string; icon: string }> = {
+  pending: { label: 'قيد الانتظار', color: colors.secondary, icon: 'time-outline' },
+  accepted: { label: 'تم القبول', color: colors.primary, icon: 'checkmark-circle-outline' },
+  preparing: { label: 'قيد التحضير', color: '#2196F3', icon: 'construct-outline' },
+  out_for_delivery: { label: 'في الطريق', color: '#9C27B0', icon: 'bicycle-outline' },
+  delivered: { label: 'تم التسليم', color: colors.success, icon: 'checkmark-done-outline' },
+  rejected: { label: 'مرفوض', color: colors.error, icon: 'close-circle-outline' },
+  cancelled: { label: 'ملغي', color: colors.textMuted, icon: 'ban-outline' },
 };
 
 export default function OrdersScreen() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState('الكل');
-  const { user } = useAuthStore();
-  const { data: orders = [], isLoading } = useBuyerOrders(user?.id || '');
+  const { buyerId } = useAuthStore();
+
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState('all');
+
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
+  const loadOrders = async () => {
+    if (!buyerId) return;
+    try {
+      setLoading(true);
+      const data = await getOrdersByBuyer(buyerId);
+      setOrders(data);
+    } catch (err) {
+      console.error('Orders load error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredOrders = orders.filter((order) => {
+    if (activeFilter === 'all') return true;
+    if (activeFilter === 'active') {
+      return ['pending', 'accepted', 'preparing', 'out_for_delivery'].includes(order.status);
+    }
+    if (activeFilter === 'completed') return order.status === 'delivered';
+    if (activeFilter === 'rejected') return ['rejected', 'cancelled'].includes(order.status);
+    return true;
+  });
+
+  const renderOrderCard = ({ item }: { item: Order }) => {
+    const st = STATUS_MAP[item.status] || STATUS_MAP.pending;
+    const itemNames = (item.order_items || [])
+      .map((oi) => oi.products?.name || '')
+      .filter(Boolean)
+      .join(', ');
+    const firstItemImage = item.order_items?.[0]?.products?.image_url;
+
+    return (
+      <TouchableOpacity
+        style={styles.orderCard}
+        onPress={() => router.push(`/(buyer)/order-tracking/${item.id}`)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.orderHeader}>
+          <View style={[styles.statusBadge, { backgroundColor: st.color + '15' }]}>
+            <Ionicons name={st.icon as any} size={14} color={st.color} />
+            <Text style={[styles.statusText, { color: st.color }]}>{st.label}</Text>
+          </View>
+          <Text style={styles.orderDate}>
+            {new Date(item.created_at).toLocaleDateString('ar')}
+          </Text>
+        </View>
+
+        <View style={styles.orderBody}>
+          <View style={styles.orderInfoRight}>
+            <Text style={styles.farmName}>
+              {item.farmers?.farm_name || 'مزرعة'}
+            </Text>
+            <Text style={styles.orderItems} numberOfLines={2}>
+              {itemNames || 'بدون عناصر'}
+            </Text>
+          </View>
+          {firstItemImage ? (
+            <Image source={{ uri: firstItemImage }} style={styles.orderImage} />
+          ) : (
+            <View style={[styles.orderImage, styles.placeholderImg]}>
+              <Ionicons name="bag-outline" size={24} color={colors.textMuted} />
+            </View>
+          )}
+        </View>
+
+        <View style={styles.orderFooter}>
+          <Ionicons name="chevron-back" size={18} color={colors.textMuted} />
+          <Text style={styles.orderTotal}>{item.total_price.toFixed(2)} د.أ</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <Text style={styles.pageTitle}>طلباتي</Text>
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={{ width: 40 }} />
+        <Text style={styles.headerTitle}>طلباتي</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
+      </View>
 
       {/* Filter Tabs */}
-      <View style={styles.tabsRow}>
-        {tabs.map((tab) => (
+      <FlatList
+        data={FILTER_TABS}
+        renderItem={({ item }) => (
           <TouchableOpacity
-            key={tab}
-            style={[styles.tab, activeTab === tab && styles.tabActive]}
-            onPress={() => setActiveTab(tab)}
+            style={[styles.filterTab, activeFilter === item.key && styles.filterTabActive]}
+            onPress={() => setActiveFilter(item.key)}
           >
-            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
+            <Text
+              style={[
+                styles.filterTabText,
+                activeFilter === item.key && styles.filterTabTextActive,
+              ]}
+            >
+              {item.label}
+            </Text>
           </TouchableOpacity>
-        ))}
-      </View>
-
-      <View style={styles.listContainer}>
-        {isLoading ? (
-          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 60 }} />
-        ) : (
-          <FlashList
-            data={orders}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.orderCard}
-                onPress={() => router.push(`/(buyer)/order-tracking/${item.id}`)}
-              >
-                <View style={styles.orderHeader}>
-                  <View style={[styles.statusBadge, { backgroundColor: (statusColors[item.status] || '#999') + '20' }]}>
-                    <Text style={[styles.statusText, { color: statusColors[item.status] || '#999' }]}>
-                      {statusLabels[item.status] || item.status}
-                    </Text>
-                  </View>
-                  <Text style={styles.orderId}>#{item.id}</Text>
-                </View>
-                <Text style={styles.orderItems}>
-                  {item.items.map((i: any) => `${i.name} × ${i.qty}`).join('، ')}
-                </Text>
-                <View style={styles.orderFooter}>
-                  <Button title="إعادة الطلب" onPress={() => {}} variant="outlined" size="sm" />
-                  <Text style={styles.orderTotal}>₪{item.total.toFixed(2)}</Text>
-                </View>
-              </TouchableOpacity>
-            )}
-            ListEmptyComponent={
-              <View style={styles.empty}>
-                <Ionicons name="cube-outline" size={60} color={colors.textMuted} />
-                <Text style={styles.emptyTitle}>لا توجد طلبات</Text>
-                <Text style={styles.emptySubtitle}>ابدأ بطلب خضار طازجة!</Text>
-              </View>
-            }
-          />
         )}
-      </View>
-    </SafeAreaView>
+        keyExtractor={(item) => item.key}
+        horizontal
+        inverted
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+      />
+
+      {/* Orders List */}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : filteredOrders.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="bag-outline" size={48} color={colors.textMuted} />
+          <Text style={styles.emptyText}>لا توجد طلبات</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredOrders}
+          renderItem={renderOrderCard}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+        />
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  pageTitle: {
-    fontFamily: 'Cairo_700Bold', fontSize: 24, color: colors.textPrimary,
-    textAlign: 'right', paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 50,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+    backgroundColor: colors.background,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 20,
+    color: colors.textPrimary,
     writingDirection: 'rtl',
   },
-  tabsRow: {
-    flexDirection: 'row-reverse', paddingHorizontal: spacing.md, gap: spacing.sm,
-    marginBottom: spacing.md,
+  filterRow: {
+    paddingHorizontal: 12,
+    gap: 8,
+    paddingBottom: 12,
   },
-  tab: {
-    paddingHorizontal: 16, paddingVertical: 8, borderRadius: radius.full,
-    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+  filterTab: {
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  tabActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  tabText: { fontFamily: 'Cairo_600SemiBold', fontSize: 13, color: colors.textSecondary },
-  tabTextActive: { color: '#FFFFFF' },
-  listContainer: { flex: 1, paddingHorizontal: spacing.md },
+  filterTabActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  filterTabText: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  filterTabTextActive: {
+    color: '#fff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+    gap: 12,
+  },
   orderCard: {
-    backgroundColor: colors.surface, borderRadius: radius.xl,
-    padding: spacing.md, marginBottom: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: 14,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
   },
   orderHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: spacing.sm,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
   },
-  orderId: { fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.textPrimary },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: radius.full },
-  statusText: { fontFamily: 'Cairo_600SemiBold', fontSize: 12 },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  statusText: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 11,
+  },
+  orderDate: {
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  orderBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+  },
+  orderImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 10,
+    resizeMode: 'cover',
+  },
+  placeholderImg: {
+    backgroundColor: colors.surfaceDim,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  orderInfoRight: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  farmName: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 14,
+    color: colors.textPrimary,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
   orderItems: {
-    fontFamily: 'Cairo_400Regular', fontSize: 14, color: colors.textSecondary,
-    textAlign: 'right', writingDirection: 'rtl', marginBottom: spacing.sm,
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    marginTop: 2,
   },
   orderFooter: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 10,
   },
-  orderTotal: { fontFamily: 'Cairo_700Bold', fontSize: 16, color: colors.primary },
-  empty: { alignItems: 'center', paddingTop: 80 },
-  emptyEmoji: { fontSize: 60 },
-  emptyTitle: { fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textPrimary, marginTop: spacing.md },
-  emptySubtitle: { fontFamily: 'Cairo_400Regular', fontSize: 14, color: colors.textMuted },
+  orderTotal: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 16,
+    color: colors.primary,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    paddingBottom: 60,
+  },
+  emptyText: {
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 15,
+    color: colors.textMuted,
+    writingDirection: 'rtl',
+  },
 });

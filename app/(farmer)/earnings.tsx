@@ -1,25 +1,79 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Avatar from '../../components/ui/Avatar';
-import EarningsChart from '../../components/farmer/EarningsChart';
-import Badge from '../../components/ui/Badge';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 import { useAuthStore } from '../../store/authStore';
-import { useFarmerEarnings, useFarmerTransactions } from '../../hooks/useEarnings';
+import { getOrdersByFarmer } from '../../lib/orders';
 
 const periods = ['اليوم', 'الأسبوع', 'الشهر'];
 
 export default function EarningsScreen() {
+  const router = useRouter();
+  const farmerId = useAuthStore((s) => s.farmerId);
   const [period, setPeriod] = useState('اليوم');
-  const { user } = useAuthStore();
-  const { data: earnings, isLoading: earningsLoading } = useFarmerEarnings(user?.id || '', period);
-  const { data: transactions = [], isLoading: txLoading } = useFarmerTransactions(user?.id || '');
+  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [transactions, setTransactions] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (farmerId) loadEarnings();
+  }, [farmerId, period]);
+
+  const loadEarnings = async () => {
+    if (!farmerId) return;
+    setLoading(true);
+    try {
+      const orders = await getOrdersByFarmer(farmerId);
+      const deliveredOrders = orders.filter((o: any) => o.status === 'delivered');
+
+      const now = new Date();
+      let startDate: Date;
+
+      if (period === 'اليوم') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      } else if (period === 'الأسبوع') {
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      } else {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      }
+
+      const filtered = deliveredOrders.filter(
+        (o: any) => new Date(o.created_at) >= startDate
+      );
+
+      const totalAmount = filtered.reduce((sum: number, o: any) => sum + (o.total_price || 0), 0);
+      setTotal(totalAmount);
+
+      // Map to transactions
+      const txList = filtered.map((o: any) => ({
+        id: o.id,
+        buyerName: o.users?.full_name || 'مشتري',
+        amount: o.total_price || 0,
+        date: new Date(o.created_at).toLocaleDateString('ar-EG', {
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+        }),
+        items: (o.order_items || []).map((i: any) => i.products?.name || '').filter(Boolean).join(', '),
+      }));
+      setTransactions(txList);
+    } catch (err) {
+      console.log('Earnings error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Text style={styles.pageTitle}>أرباحي</Text>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>الأرباح</Text>
+        <View style={{ width: 24 }} />
+      </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
         {/* Period Tabs */}
@@ -37,40 +91,40 @@ export default function EarningsScreen() {
 
         {/* Total */}
         <View style={styles.totalCard}>
-          {earningsLoading ? (
+          {loading ? (
             <ActivityIndicator size="large" color={colors.primary} />
           ) : (
             <>
-              <Text style={styles.totalAmount}>{earnings?.total || 0} ₪</Text>
-              <Badge label="↑ 23% مقارنة بالفترة السابقة" variant="fresh" />
+              <Text style={styles.totalLabel}>إجمالي الأرباح</Text>
+              <Text style={styles.totalAmount}>{total.toFixed(2)} ₪</Text>
             </>
           )}
         </View>
 
-        {/* Chart */}
-        <View style={styles.chartCard}>
-          <EarningsChart />
-        </View>
-
         {/* Transactions */}
         <Text style={styles.sectionTitle}>المعاملات الأخيرة</Text>
-        {txLoading ? (
+        {loading ? (
           <View style={{ padding: spacing.lg, alignItems: 'center' }}>
             <ActivityIndicator size="small" color={colors.primary} />
           </View>
         ) : transactions.length === 0 ? (
-          <Text style={styles.emptyText}>لا توجد معاملات بعد</Text>
+          <View style={{ alignItems: 'center', paddingTop: spacing.xl }}>
+            <Ionicons name="wallet-outline" size={50} color={colors.textMuted} />
+            <Text style={styles.emptyText}>لا توجد معاملات في هذه الفترة</Text>
+          </View>
         ) : (
-          transactions.map((tx: any) => (
+          transactions.map((tx) => (
             <View key={tx.id} style={styles.txCard}>
               <View style={styles.txRow}>
-                <Text style={styles.txAmount}>+₪{tx.amount}</Text>
+                <Text style={styles.txAmount}>+{tx.amount.toFixed(2)} ₪</Text>
                 <View style={styles.txInfo}>
-                  <Text style={styles.txBuyer}>{tx.buyer}</Text>
-                  <Text style={styles.txItems}>{tx.items}</Text>
+                  <Text style={styles.txBuyer}>{tx.buyerName}</Text>
+                  {tx.items ? <Text style={styles.txItems}>{tx.items}</Text> : null}
                   <Text style={styles.txDate}>{tx.date}</Text>
                 </View>
-                <Avatar uri={tx.avatar || ''} size={40} />
+                <View style={styles.txAvatar}>
+                  <Ionicons name="person" size={18} color={colors.primary} />
+                </View>
               </View>
             </View>
           ))
@@ -82,11 +136,11 @@ export default function EarningsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  pageTitle: {
-    fontFamily: 'Cairo_700Bold', fontSize: 22, color: colors.textPrimary,
-    textAlign: 'right', paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    writingDirection: 'rtl',
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
   },
+  headerTitle: { fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textPrimary },
   tabsRow: {
     flexDirection: 'row-reverse', paddingHorizontal: spacing.md, gap: spacing.sm,
     marginBottom: spacing.md,
@@ -103,12 +157,11 @@ const styles = StyleSheet.create({
     alignItems: 'center', paddingVertical: spacing.lg, marginHorizontal: spacing.md,
     backgroundColor: colors.surface, borderRadius: radius.xl, marginBottom: spacing.md,
   },
-  totalAmount: {
-    fontFamily: 'Cairo_700Bold', fontSize: 36, color: colors.primary, marginBottom: 8,
+  totalLabel: {
+    fontFamily: 'Cairo_400Regular', fontSize: 14, color: colors.textMuted, marginBottom: 4,
   },
-  chartCard: {
-    backgroundColor: colors.surface, borderRadius: radius.xl,
-    marginHorizontal: spacing.md, marginBottom: spacing.md,
+  totalAmount: {
+    fontFamily: 'Cairo_700Bold', fontSize: 36, color: colors.primary,
   },
   sectionTitle: {
     fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textPrimary,
@@ -117,7 +170,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontFamily: 'Cairo_400Regular', fontSize: 14, color: colors.textMuted,
-    textAlign: 'center', paddingVertical: spacing.lg,
+    marginTop: spacing.md,
   },
   txCard: {
     backgroundColor: colors.surface, borderRadius: radius.xl,
@@ -125,6 +178,10 @@ const styles = StyleSheet.create({
   },
   txRow: {
     flexDirection: 'row', alignItems: 'center',
+  },
+  txAvatar: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: '#E8F5E1', alignItems: 'center', justifyContent: 'center',
   },
   txInfo: { flex: 1, marginLeft: spacing.sm, marginRight: spacing.sm },
   txBuyer: {

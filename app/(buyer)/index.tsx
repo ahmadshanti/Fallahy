@@ -1,134 +1,256 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
+  FlatList,
+  StatusBar,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import HeroBanner from '../../components/buyer/HeroBanner';
-import PriceTicker from '../../components/buyer/PriceTicker';
-import ProductCard from '../../components/buyer/ProductCard';
-import FarmerCard from '../../components/buyer/FarmerCard';
-import SectionHeader from '../../components/buyer/SectionHeader';
 import { colors } from '../../constants/colors';
-import { spacing } from '../../constants/spacing';
-import { useCartStore } from '../../store/cartStore';
 import { useAuthStore } from '../../store/authStore';
-import { useProducts } from '../../hooks/useProducts';
-import { useFarmers } from '../../hooks/useFarmers';
-import { usePriceTicker } from '../../hooks/useSavings';
-import { useBuyerSavings } from '../../hooks/useSavings';
+import { useCartStore } from '../../store/cartStore';
+import { getProducts } from '../../lib/products';
+import { getFarmersByCity, getAllFarmers } from '../../lib/farmers';
+import { getUnreadCount } from '../../lib/notifications';
+import { Product, Farmer } from '../../types';
 
-const { width } = Dimensions.get('window');
-
-export default function BuyerHomeScreen() {
+export default function BuyerHome() {
   const router = useRouter();
+  const { user, buyerId } = useAuthStore();
   const cartItems = useCartStore((s) => s.items);
-  const { user } = useAuthStore();
-  const { data: products = [], isLoading: productsLoading } = useProducts({ limit: 10 });
-  const { data: farmers = [], isLoading: farmersLoading } = useFarmers();
-  const { data: priceTicker = [] } = usePriceTicker();
-  const { data: savings } = useBuyerSavings(user?.id || '');
+  const addItem = useCartStore((s) => s.addItem);
 
-  const savingsAmount = savings?.totalSaved || 0;
+  const [products, setProducts] = useState<Product[]>([]);
+  const [farmers, setFarmers] = useState<Farmer[]>([]);
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [prods, notifCount] = await Promise.all([
+        getProducts({ limit: 8 }),
+        buyerId ? getUnreadCount(buyerId) : Promise.resolve(0),
+      ]);
+      setProducts(prods);
+      setUnreadNotifs(notifCount);
+
+      let farmerList: Farmer[] = [];
+      if (user?.city) {
+        farmerList = await getFarmersByCity(user.city);
+      }
+      if (farmerList.length === 0) {
+        farmerList = await getAllFarmers();
+      }
+      setFarmers(farmerList.slice(0, 6));
+    } catch (err) {
+      console.error('Home load error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderProductCard = (product: Product) => {
+    const price = product.retail_price || 0;
+    const farmerName = product.farmers?.farm_name || '';
+    return (
+      <TouchableOpacity
+        key={product.id}
+        style={styles.productCard}
+        onPress={() => router.push(`/(buyer)/product/${product.id}`)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.productImageWrapper}>
+          {product.image_url ? (
+            <Image source={{ uri: product.image_url }} style={styles.productImage} />
+          ) : (
+            <View style={[styles.productImage, styles.placeholderImage]}>
+              <Ionicons name="image-outline" size={32} color={colors.textMuted} />
+            </View>
+          )}
+          {product.is_organic && (
+            <View style={styles.organicBadge}>
+              <Ionicons name="leaf" size={10} color="#fff" />
+              <Text style={styles.organicBadgeText}>عضوي</Text>
+            </View>
+          )}
+          <TouchableOpacity
+            style={styles.addToCartBtn}
+            onPress={() => addItem(product, 1, 'retail')}
+          >
+            <Ionicons name="add" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.productInfo}>
+          <Text style={styles.productName} numberOfLines={1}>{product.name}</Text>
+          <Text style={styles.productFarmer} numberOfLines={1}>{farmerName}</Text>
+          <Text style={styles.productPrice}>{price.toFixed(2)} د.أ</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderFarmerCard = (farmer: Farmer) => (
+    <TouchableOpacity
+      key={farmer.id}
+      style={styles.farmerCard}
+      onPress={() => router.push(`/(buyer)/farmer/${farmer.id}`)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.farmerAvatarWrapper}>
+        {farmer.owner_avatar_url ? (
+          <Image source={{ uri: farmer.owner_avatar_url }} style={styles.farmerAvatar} />
+        ) : (
+          <View style={[styles.farmerAvatar, styles.placeholderAvatar]}>
+            <Ionicons name="person" size={24} color={colors.textMuted} />
+          </View>
+        )}
+        {farmer.is_verified && (
+          <View style={styles.verifiedBadge}>
+            <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
+          </View>
+        )}
+      </View>
+      <Text style={styles.farmerName} numberOfLines={1}>{farmer.farm_name}</Text>
+      <View style={styles.farmerCityRow}>
+        <Ionicons name="location-outline" size={12} color={colors.textMuted} />
+        <Text style={styles.farmerCity}>{farmer.city}</Text>
+      </View>
+      <TouchableOpacity
+        style={styles.visitBtn}
+        onPress={() => router.push(`/(buyer)/farmer/${farmer.id}`)}
+      >
+        <Text style={styles.visitBtnText}>زيارة</Text>
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Top Bar */}
-        <View style={styles.topBar}>
-          <View style={styles.topBarRight}>
-            <Ionicons name="location-outline" size={18} color={colors.primary} />
-            <Text style={styles.locationText}>{user?.city || 'فلسطين'}</Text>
-          </View>
-          <View style={styles.topBarLeft}>
-            <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/(buyer)/cart')}>
-              <Ionicons name="cart-outline" size={22} color={colors.textPrimary} />
-              {cartItems.length > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{cartItems.length}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconBtn}>
-              <Ionicons name="notifications-outline" size={22} color={colors.textPrimary} />
-            </TouchableOpacity>
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      {/* Top Bar */}
+      <View style={styles.topBar}>
+        <TouchableOpacity onPress={() => router.push('/(buyer)/cart')} style={styles.iconBtn}>
+          <Ionicons name="cart-outline" size={26} color={colors.textPrimary} />
+          {cartItems.length > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{cartItems.length}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        <View style={styles.topBarCenter}>
+          <Text style={styles.greeting}>مرحبا، {user?.full_name || 'ضيف'}</Text>
+          <View style={styles.cityRow}>
+            <Ionicons name="location" size={14} color={colors.secondary} />
+            <Text style={styles.cityText}>{user?.city || 'حدد موقعك'}</Text>
           </View>
         </View>
-
-        {/* Search Bar */}
-        <TouchableOpacity style={styles.searchBar} onPress={() => router.push('/(buyer)/explore')}>
-          <Ionicons name="mic-outline" size={20} color={colors.primary} />
-          <Text style={styles.searchPlaceholder}>ابحث عن خضار، فواكه أو مزارعين...</Text>
-          <Ionicons name="search-outline" size={20} color={colors.textMuted} />
+        <TouchableOpacity onPress={() => router.push('/(buyer)/orders')} style={styles.iconBtn}>
+          <Ionicons name="notifications-outline" size={26} color={colors.textPrimary} />
+          {unreadNotifs > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{unreadNotifs > 9 ? '9+' : unreadNotifs}</Text>
+            </View>
+          )}
         </TouchableOpacity>
+      </View>
 
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Hero Banner */}
-        <View style={{ marginTop: spacing.md }}>
-          <HeroBanner />
+        <LinearGradient
+          colors={[colors.primary, colors.primaryDark]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.heroBanner}
+        >
+          <View style={styles.heroContent}>
+            <Text style={styles.heroTitle}>من المزرعة إلى بيتك</Text>
+            <Text style={styles.heroSubtitle}>منتجات طازجة وعضوية مباشرة من المزارعين</Text>
+            <TouchableOpacity
+              style={styles.heroBtn}
+              onPress={() => router.push('/(buyer)/explore')}
+            >
+              <Text style={styles.heroBtnText}>تصفح المنتجات</Text>
+              <Ionicons name="arrow-back" size={16} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.heroIconWrapper}>
+            <Ionicons name="leaf" size={80} color="rgba(255,255,255,0.15)" />
+          </View>
+        </LinearGradient>
+
+        {/* Most Requested Products */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <TouchableOpacity onPress={() => router.push('/(buyer)/explore')}>
+              <Text style={styles.seeAll}>عرض الكل</Text>
+            </TouchableOpacity>
+            <Text style={styles.sectionTitle}>الأكثر طلبا</Text>
+          </View>
+          {products.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="basket-outline" size={40} color={colors.textMuted} />
+              <Text style={styles.emptyText}>لا توجد منتجات حاليا</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={products}
+              renderItem={({ item }) => renderProductCard(item)}
+              keyExtractor={(item) => item.id}
+              horizontal
+              inverted
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalList}
+            />
+          )}
         </View>
-
-        {/* Price Ticker */}
-        <View style={{ marginTop: spacing.md }}>
-          <PriceTicker items={priceTicker} />
-        </View>
-
-        {/* Savings Banner */}
-        <TouchableOpacity style={styles.savingsBanner} onPress={() => router.push('/(buyer)/profile')}>
-          <Ionicons name="chevron-back" size={20} color="rgba(255,255,255,0.5)" />
-          <View style={styles.savingsContent}>
-            <Text style={styles.savingsTitle}>
-              {savingsAmount > 0 ? `وفّرت ${savingsAmount} شيكل هاد الشهر` : 'ابدأ بالتسوق'}
-            </Text>
-            <Text style={styles.savingsSubtitle}>أنت بطل الاقتصاد الزراعي!</Text>
-          </View>
-          <View style={styles.savingsIcon}>
-            <Ionicons name="cart-outline" size={20} color="#FFFFFF" />
-          </View>
-        </TouchableOpacity>
-
-        {/* Most Ordered */}
-        <SectionHeader title="الأكثر طلباً" actionText="عرض الكل" onAction={() => router.push('/(buyer)/explore')} />
-        {productsLoading ? (
-          <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.lg }} />
-        ) : products.length === 0 ? (
-          <View style={{ alignItems: 'center', paddingVertical: spacing.lg }}>
-            <Text style={{ fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.textMuted }}>لا توجد منتجات حالياً</Text>
-          </View>
-        ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.horizontalList}
-          >
-            {products.map((product) => (
-              <View key={product.id} style={{ marginLeft: spacing.sm }}>
-                <ProductCard
-                  product={product}
-                  onPress={() => router.push(`/(buyer)/product/${product.id}`)}
-                />
-              </View>
-            ))}
-          </ScrollView>
-        )}
 
         {/* Nearby Farmers */}
-        <SectionHeader title="مزارعون قريبون منك" actionText="عرض الكل" onAction={() => router.push('/(buyer)/map')} />
-        {farmersLoading ? (
-          <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.lg }} />
-        ) : (
-          <View style={styles.farmersList}>
-            {farmers.map((farmer) => (
-              <FarmerCard
-                key={farmer.id}
-                farmer={farmer}
-                onPress={() => router.push(`/(buyer)/farmer/${farmer.id}`)}
-              />
-            ))}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View />
+            <Text style={styles.sectionTitle}>مزارعون قريبون</Text>
           </View>
-        )}
+          {farmers.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="people-outline" size={40} color={colors.textMuted} />
+              <Text style={styles.emptyText}>لا يوجد مزارعون حاليا</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={farmers}
+              renderItem={({ item }) => renderFarmerCard(item)}
+              keyExtractor={(item) => item.id}
+              horizontal
+              inverted
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalList}
+            />
+          )}
+        </View>
 
-        <View style={{ height: 20 }} />
+        <View style={{ height: 30 }} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -137,124 +259,302 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+  },
   topBar: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 50,
+    paddingBottom: 12,
+    backgroundColor: colors.background,
   },
-  topBarRight: {
-    flexDirection: 'row-reverse',
+  topBarCenter: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  greeting: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 16,
+    color: colors.textPrimary,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  cityRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
-  locationIcon: {
-    fontSize: 16,
-  },
-  locationText: {
-    fontFamily: 'Cairo_600SemiBold',
-    fontSize: 14,
-    color: colors.textPrimary,
-  },
-  topBarLeft: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  iconBtn: {
-    position: 'relative',
-  },
-  iconText: {
-    fontSize: 22,
-  },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -6,
-    backgroundColor: colors.error,
-    borderRadius: 10,
-    width: 18,
-    height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontFamily: 'Cairo_700Bold',
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surfaceDim,
-    borderRadius: 12,
-    height: 48,
-    marginHorizontal: spacing.md,
-    paddingHorizontal: spacing.md,
-  },
-  searchIcon: {
-    fontSize: 18,
-    color: colors.primary,
-  },
-  searchPlaceholder: {
-    flex: 1,
-    fontFamily: 'Cairo_400Regular',
-    fontSize: 14,
-    color: colors.textMuted,
-    textAlign: 'right',
-    marginHorizontal: spacing.sm,
-  },
-  searchIconLeft: {
-    fontSize: 18,
-    color: colors.textMuted,
-  },
-  savingsBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: 16,
-    padding: spacing.md,
-    marginHorizontal: spacing.md,
-    marginTop: spacing.md,
-  },
-  savingsChevron: {
-    fontSize: 20,
-    color: 'rgba(255,255,255,0.5)',
-  },
-  savingsContent: {
-    flex: 1,
-    marginHorizontal: spacing.sm,
-  },
-  savingsTitle: {
-    fontFamily: 'Cairo_700Bold',
-    fontSize: 15,
-    color: '#FFFFFF',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  savingsSubtitle: {
+  cityText: {
     fontFamily: 'Cairo_400Regular',
     fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
-    textAlign: 'right',
+    color: colors.textSecondary,
     writingDirection: 'rtl',
   },
-  savingsIcon: {
+  iconBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
+    backgroundColor: colors.surface,
     justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
   },
-  savingsIconText: {
-    fontSize: 20,
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: colors.error,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 10,
+    color: '#fff',
+  },
+  scrollContent: {
+    paddingBottom: 20,
+  },
+  heroBanner: {
+    marginHorizontal: 16,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    minHeight: 140,
+  },
+  heroContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+  },
+  heroTitle: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 22,
+    color: '#fff',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  heroSubtitle: {
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.85)',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  heroBtn: {
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  heroBtnText: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 13,
+    color: colors.primary,
+  },
+  heroIconWrapper: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10,
+  },
+  section: {
+    marginBottom: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 18,
+    color: colors.textPrimary,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  seeAll: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 13,
+    color: colors.secondary,
   },
   horizontalList: {
-    paddingHorizontal: spacing.md,
-    gap: spacing.sm,
+    paddingHorizontal: 12,
+    gap: 12,
   },
-  farmersList: {
-    paddingHorizontal: spacing.md,
+  productCard: {
+    width: 160,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+  },
+  productImageWrapper: {
+    position: 'relative',
+    width: '100%',
+    height: 120,
+  },
+  productImage: {
+    width: '100%',
+    height: 120,
+    resizeMode: 'cover',
+  },
+  placeholderImage: {
+    backgroundColor: colors.surfaceDim,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  organicBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: colors.success,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    gap: 2,
+  },
+  organicBadgeText: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 9,
+    color: '#fff',
+  },
+  addToCartBtn: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  productInfo: {
+    padding: 10,
+    alignItems: 'flex-end',
+  },
+  productName: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 13,
+    color: colors.textPrimary,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  productFarmer: {
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 11,
+    color: colors.textMuted,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    marginTop: 2,
+  },
+  productPrice: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 14,
+    color: colors.primary,
+    marginTop: 4,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  farmerCard: {
+    width: 140,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+  },
+  farmerAvatarWrapper: {
+    position: 'relative',
+    marginBottom: 8,
+  },
+  farmerAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+  },
+  placeholderAvatar: {
+    backgroundColor: colors.surfaceDim,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  verifiedBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+  },
+  farmerName: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 13,
+    color: colors.textPrimary,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  farmerCityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  farmerCity: {
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  visitBtn: {
+    backgroundColor: colors.primaryLight + '30',
+    paddingHorizontal: 20,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  visitBtnText: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 12,
+    color: colors.primary,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 30,
+    gap: 8,
+  },
+  emptyText: {
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 14,
+    color: colors.textMuted,
+    textAlign: 'center',
+    writingDirection: 'rtl',
   },
 });

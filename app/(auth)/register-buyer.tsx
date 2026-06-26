@@ -15,13 +15,13 @@ import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 
 const countries = [
-  { name: 'فلسطين', code: '+970', flag: '🇵🇸', cities: ['رام الله', 'نابلس', 'الخليل', 'جنين', 'بيت لحم', 'طولكرم', 'قلقيلية', 'غزة', 'خان يونس', 'سلفيت', 'أريحا', 'طوباس'] },
-  { name: 'الأردن', code: '+962', flag: '🇯🇴', cities: ['عمّان', 'إربد', 'الزرقاء', 'العقبة', 'المفرق', 'جرش', 'عجلون', 'الكرك', 'مادبا', 'السلط'] },
+  { name: 'فلسطين', code: '+970', flag: 'PS', cities: ['رام الله', 'نابلس', 'الخليل', 'جنين', 'بيت لحم', 'طولكرم', 'قلقيلية', 'غزة', 'خان يونس', 'سلفيت', 'أريحا', 'طوباس'] },
+  { name: 'الأردن', code: '+962', flag: 'JO', cities: ['عمّان', 'إربد', 'الزرقاء', 'العقبة', 'المفرق', 'جرش', 'عجلون', 'الكرك', 'مادبا', 'السلط'] },
 ];
 
 export default function RegisterBuyerScreen() {
   const router = useRouter();
-  const login = useAuthStore((s) => s.login);
+  const { loginAsBuyer } = useAuthStore();
   const [step, setStep] = useState(1);
   const [avatar, setAvatar] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -80,20 +80,20 @@ export default function RegisterBuyerScreen() {
     }
     setLoading(true);
     try {
-      const fullPhone = `${selectedCountry.code}${phone}`;
+      const fullPhone = `${selectedCountry.code}${phone.replace(/^0+/, '')}`;
       const cleanPhone = phone.replace(/^0+/, '');
 
-      // Check if phone already exists
+      // Check if phone already exists in users table
       const { data: existing } = await supabase
-        .from('profiles')
-        .select('id, name')
+        .from('users')
+        .select('id, full_name')
         .or(`phone.ilike.%${cleanPhone}%`)
         .limit(1);
 
       if (existing && existing.length > 0) {
         Alert.alert(
           'الرقم مسجّل مسبقاً',
-          `يوجد حساب باسم "${existing[0].name}" مرتبط بهذا الرقم.\nهل تريد تسجيل الدخول بدلاً من ذلك؟`,
+          `يوجد حساب باسم "${existing[0].full_name}" مرتبط بهذا الرقم.\nهل تريد تسجيل الدخول بدلاً من ذلك؟`,
           [
             { text: 'تسجيل الدخول', onPress: () => router.push('/(auth)/login') },
             { text: 'إلغاء', style: 'cancel' },
@@ -103,6 +103,7 @@ export default function RegisterBuyerScreen() {
         return;
       }
 
+      // Create anonymous Supabase auth session
       const { data: signUpData, error: signUpError } = await supabase.auth.signInAnonymously();
       if (signUpError) {
         Alert.alert('خطأ', signUpError.message);
@@ -117,7 +118,8 @@ export default function RegisterBuyerScreen() {
         return;
       }
 
-      let avatarUrl = null;
+      // Upload avatar if selected
+      let avatarUrl: string | null = null;
       if (avatar) {
         try {
           const fileExt = avatar.split('.').pop()?.split('?')[0] || 'jpg';
@@ -134,27 +136,26 @@ export default function RegisterBuyerScreen() {
         }
       }
 
-      const address = neighborhood ? `${city}، ${neighborhood}` : city;
-      const { error } = await supabase.from('profiles').upsert({
-        id: userId,
-        name,
-        phone: fullPhone,
-        city,
-        address,
-        role: 'buyer',
-        avatar_url: avatarUrl,
-      });
+      // Insert into users table (NOT profiles)
+      const { data: userData, error: insertError } = await supabase
+        .from('users')
+        .insert({
+          id: userId,
+          full_name: name,
+          phone: fullPhone,
+          city,
+          avatar_url: avatarUrl,
+        })
+        .select()
+        .single();
 
-      if (error) {
-        Alert.alert('خطأ', error.message);
+      if (insertError) {
+        Alert.alert('خطأ', insertError.message);
         setLoading(false);
         return;
       }
 
-      login(
-        { id: userId, name, phone: fullPhone, role: 'buyer', city, address, avatar: avatarUrl || undefined },
-        'buyer'
-      );
+      loginAsBuyer(userData);
       router.replace('/(buyer)');
     } catch (err: any) {
       Alert.alert('خطأ', err?.message || 'حدث خطأ');
@@ -166,7 +167,7 @@ export default function RegisterBuyerScreen() {
   const canProceed = () => {
     if (step === 1) return true; // photo is optional
     if (step === 2) return name.length > 0;
-    if (step === 3) return phone.length >= 9;
+    if (step === 3) return phone.length >= 7;
     if (step === 4) return city.length > 0;
     return false;
   };
@@ -201,7 +202,7 @@ export default function RegisterBuyerScreen() {
             {step === 1 && (
               <View style={styles.stepContainer}>
                 <Text style={styles.stepTitle}>صورتك الشخصية</Text>
-                <Text style={styles.stepSubtitle}>اختياري — يمكنك إضافتها لاحقاً</Text>
+                <Text style={styles.stepSubtitle}>اختياري - يمكنك إضافتها لاحقاً</Text>
                 <TouchableOpacity style={styles.avatarPicker} onPress={showImageOptions}>
                   {avatar ? (
                     <Image source={{ uri: avatar }} style={styles.avatarImage} />
@@ -234,7 +235,7 @@ export default function RegisterBuyerScreen() {
             {/* Step 3: Phone */}
             {step === 3 && (
               <View style={styles.stepContainer}>
-                <Text style={styles.stepTitle}>رقم الواتساب</Text>
+                <Text style={styles.stepTitle}>رقم الهاتف</Text>
                 <Text style={styles.stepSubtitle}>عشان المزارع يقدر يتواصل معك</Text>
                 <View style={[styles.phoneRow, styles.fullWidth]}>
                   <View style={styles.phoneInput}>
@@ -247,8 +248,8 @@ export default function RegisterBuyerScreen() {
                     />
                   </View>
                   <TouchableOpacity style={styles.countryBtn} onPress={() => setShowCountries(!showCountries)}>
-                    <Text style={styles.countryFlag}>{selectedCountry.flag}</Text>
                     <Text style={styles.countryCode}>{selectedCountry.code}</Text>
+                    <Text style={styles.countryName}>{selectedCountry.name}</Text>
                     <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
                   </TouchableOpacity>
                 </View>
@@ -261,7 +262,7 @@ export default function RegisterBuyerScreen() {
                         onPress={() => { setSelectedCountry(c); setShowCountries(false); setCity(''); }}
                       >
                         <Text style={styles.dropdownCode}>{c.code}</Text>
-                        <Text style={styles.dropdownName}>{c.flag} {c.name}</Text>
+                        <Text style={styles.dropdownName}>{c.name}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -381,7 +382,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border,
     paddingHorizontal: spacing.sm, height: 48, marginBottom: spacing.md,
   },
-  countryFlag: { fontSize: 20 },
+  countryName: { fontFamily: 'Cairo_600SemiBold', fontSize: 13, color: colors.textPrimary },
   countryCode: { fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.textPrimary },
   fieldLabel: {
     fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.textPrimary,

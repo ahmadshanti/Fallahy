@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, Easing, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Image as RNImage, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import Input from '../../components/ui/Input';
@@ -9,88 +9,130 @@ import Button from '../../components/ui/Button';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 import { useAuthStore } from '../../store/authStore';
-import { useCreateProduct } from '../../hooks/useProducts';
+import { addProduct, updateProduct } from '../../lib/products';
+import { supabase } from '../../lib/supabase';
 
-const categories = ['خضار', 'فواكه', 'زيوت', 'أعشاب'];
 const units = ['كغ', 'ليتر', 'حبة', 'طرد'];
+const saleTypes = ['مفرق', 'جملة', 'كلاهما'];
 
 export default function AddProductScreen() {
   const router = useRouter();
-  const { user } = useAuthStore();
-  const createProduct = useCreateProduct();
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState('');
-  const [images, setImages] = useState<string[]>([]);
-  const [retailPrice, setRetailPrice] = useState('');
-  const [wholesalePrice, setWholesalePrice] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [unit, setUnit] = useState('كغ');
-  const [isOrganic, setIsOrganic] = useState(false);
-  const [selfPick, setSelfPick] = useState(false);
-  const [adoptable, setAdoptable] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
+  const params = useLocalSearchParams();
+  const farmerId = useAuthStore((s) => s.farmerId);
 
-  const pulseScale = useRef(new Animated.Value(1)).current;
-  const pulseAnim = useRef<Animated.CompositeAnimation | null>(null);
+  const isEditing = !!params.editId;
+  const editId = params.editId as string;
 
-  useEffect(() => {
-    if (isRecording) {
-      pulseAnim.current = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseScale, { toValue: 1.3, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          Animated.timing(pulseScale, { toValue: 1, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        ])
-      );
-      pulseAnim.current.start();
-    } else {
-      pulseAnim.current?.stop();
-      Animated.timing(pulseScale, { toValue: 1, duration: 200, useNativeDriver: true }).start();
-    }
-  }, [isRecording]);
+  const [name, setName] = useState((params.editName as string) || '');
+  const [imageUri, setImageUri] = useState<string | null>((params.editImage as string) || null);
+  const [quantity, setQuantity] = useState((params.editQuantity as string) || '');
+  const [unit, setUnit] = useState((params.editUnit as string) || 'كغ');
+  const [saleType, setSaleType] = useState((params.editSaleType as string) || 'مفرق');
+  const [retailPrice, setRetailPrice] = useState((params.editRetailPrice as string) || '');
+  const [wholesalePrice, setWholesalePrice] = useState((params.editWholesalePrice as string) || '');
+  const [discountPercent, setDiscountPercent] = useState((params.editDiscount as string) || '');
+  const [isOrganic, setIsOrganic] = useState(params.editOrganic === 'true');
+  const [description, setDescription] = useState((params.editDescription as string) || '');
+  const [saving, setSaving] = useState(false);
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.8,
-    });
-    if (!result.canceled && images.length < 3) {
-      setImages([...images, result.assets[0].uri]);
+  const pickImage = async (fromCamera: boolean) => {
+    try {
+      if (fromCamera) {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('تنبيه', 'يرجى السماح بالوصول للكاميرا من إعدادات الجهاز');
+          return;
+        }
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('تنبيه', 'يرجى السماح بالوصول للصور من إعدادات الجهاز');
+          return;
+        }
+      }
+      const options: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      };
+      const result = fromCamera
+        ? await ImagePicker.launchCameraAsync(options)
+        : await ImagePicker.launchImageLibraryAsync(options);
+      if (!result.canceled) {
+        setImageUri(result.assets[0].uri);
+      }
+    } catch {
+      Alert.alert('خطأ', 'فشل فتح الكاميرا أو المعرض');
     }
   };
 
-  const handleVoice = () => {
-    setIsRecording(!isRecording);
-    if (isRecording) {
-      setName('بندورة بلدية');
-      setCategory('خضار');
-      setRetailPrice('3');
-      setWholesalePrice('2.2');
-      setQuantity('150');
+  const showImageOptions = () => {
+    Alert.alert('صورة المنتج', 'اختر طريقة إضافة الصورة', [
+      { text: 'التقاط صورة', onPress: () => pickImage(true) },
+      { text: 'اختيار من المعرض', onPress: () => pickImage(false) },
+      { text: 'إلغاء', style: 'cancel' },
+    ]);
+  };
+
+  const uploadImage = async (): Promise<string | null> => {
+    if (!imageUri || !farmerId) return null;
+    // If it's an existing URL (not a local file), skip upload
+    if (imageUri.startsWith('http')) return imageUri;
+
+    try {
+      const fileExt = imageUri.split('.').pop()?.split('?')[0] || 'jpg';
+      const fileName = `${farmerId}/${Date.now()}.${fileExt}`;
+      const formData = new FormData();
+      formData.append('file', { uri: imageUri, name: `product.${fileExt}`, type: `image/${fileExt}` } as any);
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(fileName, formData, { upsert: true });
+      if (!uploadError) {
+        const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(fileName);
+        return urlData.publicUrl;
+      }
+    } catch (e) {
+      console.log('Image upload error:', e);
     }
+    return null;
   };
 
   const handleSubmit = async () => {
-    if (!name || !category || !user?.id) return;
+    if (!name || !farmerId) {
+      Alert.alert('تنبيه', 'يرجى ملء اسم المنتج');
+      return;
+    }
+    setSaving(true);
     try {
-      await createProduct.mutateAsync({
-        farmer_id: user.id,
+      const imageUrl = await uploadImage();
+
+      const productData: Record<string, any> = {
+        farmer_id: farmerId,
         name,
-        category,
-        retail_price: Number(retailPrice),
-        wholesale_price: Number(wholesalePrice),
-        market_price: Number(retailPrice) * 1.5,
+        image_url: imageUrl,
+        quantity_available: Number(quantity) || 0,
         unit,
-        available: Number(quantity),
-        harvest_date: 'اليوم',
+        sale_type: saleType,
+        retail_price: Number(retailPrice) || 0,
+        wholesale_price: Number(wholesalePrice) || 0,
+        discount_percent: Number(discountPercent) || 0,
         is_organic: isOrganic,
-        is_fresh: true,
-        is_self_pick: selfPick,
-        is_adoptable: adoptable,
-        savings_percent: Math.round((1 - Number(retailPrice) / (Number(retailPrice) * 1.5)) * 100),
-      });
+        description,
+        is_available: true,
+      };
+
+      if (isEditing) {
+        await updateProduct(editId, productData);
+        Alert.alert('', 'تم تحديث المنتج بنجاح');
+      } else {
+        await addProduct(productData);
+        Alert.alert('', 'تم إضافة المنتج بنجاح');
+      }
       router.back();
     } catch (err: any) {
-      Alert.alert('خطأ', err?.message || 'حدث خطأ في إضافة المنتج');
+      Alert.alert('خطأ', err?.message || 'حدث خطأ');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -100,110 +142,93 @@ export default function AddProductScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>إضافة منتج</Text>
+        <Text style={styles.headerTitle}>{isEditing ? 'تعديل المنتج' : 'إضافة منتج'}</Text>
         <View style={{ width: 24 }} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        {/* Image */}
+        <Text style={styles.label}>صورة المنتج</Text>
+        <TouchableOpacity style={styles.imagePicker} onPress={showImageOptions}>
+          {imageUri ? (
+            <RNImage source={{ uri: imageUri }} style={styles.imagePreview} />
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Ionicons name="camera-outline" size={36} color={colors.textMuted} />
+              <Text style={styles.imageText}>إضافة صورة</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
+        {/* Name */}
         <Input label="اسم المنتج" value={name} onChangeText={setName} placeholder="مثال: بندورة بلدية" />
 
-        {/* Category */}
-        <Text style={styles.label}>الفئة</Text>
-        <View style={styles.chipsRow}>
-          {categories.map((cat) => (
-            <TouchableOpacity
-              key={cat}
-              style={[styles.chip, category === cat && styles.chipSelected]}
-              onPress={() => setCategory(cat)}
-            >
-              <Text style={[styles.chipText, category === cat && styles.chipTextSelected]}>{cat}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Images */}
-        <Text style={styles.label}>الصور</Text>
-        <View style={styles.imageRow}>
-          {[0, 1, 2].map((i) => (
-            <TouchableOpacity key={i} style={styles.imageSlot} onPress={pickImage}>
-              {images[i] ? (
-                <Text style={styles.imageCheck}>✓</Text>
-              ) : (
-                <Text style={styles.imagePlus}>+</Text>
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Prices */}
-        <View style={styles.priceRow}>
-          <View style={{ flex: 1 }}>
-            <Input label="سعر الجملة" value={wholesalePrice} onChangeText={setWholesalePrice} keyboardType="numeric" placeholder="₪" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Input label="سعر المفرق" value={retailPrice} onChangeText={setRetailPrice} keyboardType="numeric" placeholder="₪" />
-          </View>
-        </View>
-
         {/* Quantity + Unit */}
-        <View style={styles.priceRow}>
-          <View style={styles.unitSelector}>
+        <View style={styles.row}>
+          <View style={styles.unitSection}>
             <Text style={styles.label}>الوحدة</Text>
-            <View style={styles.unitRow}>
+            <View style={styles.chipsRow}>
               {units.map((u) => (
                 <TouchableOpacity
                   key={u}
-                  style={[styles.unitChip, unit === u && styles.unitChipSelected]}
+                  style={[styles.chip, unit === u && styles.chipSelected]}
                   onPress={() => setUnit(u)}
                 >
-                  <Text style={[styles.unitText, unit === u && styles.unitTextSelected]}>{u}</Text>
+                  <Text style={[styles.chipText, unit === u && styles.chipTextSelected]}>{u}</Text>
                 </TouchableOpacity>
               ))}
             </View>
           </View>
           <View style={{ flex: 1 }}>
-            <Input label="الكمية المتاحة" value={quantity} onChangeText={setQuantity} keyboardType="numeric" placeholder="0" />
+            <Input label="الكمية" value={quantity} onChangeText={setQuantity} keyboardType="numeric" placeholder="0" />
           </View>
         </View>
 
-        {/* Toggles */}
-        <View style={styles.togglesSection}>
-          {[
-            { label: 'عضوي؟', value: isOrganic, setter: setIsOrganic },
-            { label: 'متاح للقطف الذاتي؟', value: selfPick, setter: setSelfPick },
-            { label: 'متاح للتبني؟', value: adoptable, setter: setAdoptable },
-          ].map((toggle) => (
-            <View key={toggle.label} style={styles.toggleRow}>
-              <TouchableOpacity
-                style={[styles.switch, toggle.value && styles.switchOn]}
-                onPress={() => toggle.setter(!toggle.value)}
-              >
-                <View style={[styles.switchThumb, toggle.value && styles.switchThumbOn]} />
-              </TouchableOpacity>
-              <Text style={styles.toggleLabel}>{toggle.label}</Text>
-            </View>
+        {/* Sale Type */}
+        <Text style={styles.label}>نوع البيع</Text>
+        <View style={styles.chipsRow}>
+          {saleTypes.map((st) => (
+            <TouchableOpacity
+              key={st}
+              style={[styles.chip, saleType === st && styles.chipSelected]}
+              onPress={() => setSaleType(st)}
+            >
+              <Text style={[styles.chipText, saleType === st && styles.chipTextSelected]}>{st}</Text>
+            </TouchableOpacity>
           ))}
         </View>
 
-        {/* Voice Input */}
-        <View style={styles.voiceSection}>
-          <TouchableOpacity onPress={handleVoice}>
-            <Animated.View style={[styles.micButton, isRecording && styles.micRecording, { transform: [{ scale: pulseScale }] }]}>
-              <Ionicons name="mic" size={28} color="#FFFFFF" />
-            </Animated.View>
-          </TouchableOpacity>
-          <Text style={styles.voiceLabel}>
-            {isRecording ? 'جارٍ التسجيل...' : 'اضغط للتحدث'}
-          </Text>
+        {/* Prices */}
+        <View style={styles.row}>
+          <View style={{ flex: 1 }}>
+            <Input label="سعر الجملة (₪)" value={wholesalePrice} onChangeText={setWholesalePrice} keyboardType="numeric" placeholder="0" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Input label="سعر المفرق (₪)" value={retailPrice} onChangeText={setRetailPrice} keyboardType="numeric" placeholder="0" />
+          </View>
         </View>
 
+        {/* Discount */}
+        <Input label="نسبة الخصم (%)" value={discountPercent} onChangeText={setDiscountPercent} keyboardType="numeric" placeholder="0" />
+
+        {/* Organic Toggle */}
+        <TouchableOpacity style={styles.toggleRow} onPress={() => setIsOrganic(!isOrganic)}>
+          <View style={[styles.toggleSwitch, isOrganic && styles.toggleSwitchOn]}>
+            <View style={[styles.toggleThumb, isOrganic && styles.toggleThumbOn]} />
+          </View>
+          <Text style={styles.toggleLabel}>منتج عضوي</Text>
+        </TouchableOpacity>
+
+        {/* Description */}
+        <Input label="الوصف (اختياري)" value={description} onChangeText={setDescription} placeholder="وصف المنتج..." multiline />
+
         <Button
-          title="نشر المنتج"
+          title={isEditing ? 'حفظ التعديلات' : 'نشر المنتج'}
           onPress={handleSubmit}
           fullWidth
           size="lg"
-          disabled={!name || !category}
-          loading={createProduct.isPending}
+          disabled={!name}
+          loading={saving}
         />
       </ScrollView>
     </SafeAreaView>
@@ -216,60 +241,42 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
   },
-  backIcon: { fontSize: 24 },
   headerTitle: { fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textPrimary },
   scroll: { padding: spacing.md, paddingBottom: 40 },
   label: {
     fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.textPrimary,
     textAlign: 'right', writingDirection: 'rtl', marginBottom: spacing.xs,
   },
-  chipsRow: { flexDirection: 'row-reverse', gap: spacing.sm, marginBottom: spacing.md },
+  imagePicker: {
+    width: '100%', height: 180, borderRadius: radius.xl,
+    borderWidth: 2, borderColor: colors.border, borderStyle: 'dashed',
+    backgroundColor: colors.surfaceDim, overflow: 'hidden', marginBottom: spacing.md,
+  },
+  imagePreview: { width: '100%', height: '100%' },
+  imagePlaceholder: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+  },
+  imageText: { fontFamily: 'Cairo_600SemiBold', fontSize: 13, color: colors.textMuted, marginTop: 4 },
+  row: { flexDirection: 'row-reverse', gap: spacing.sm },
+  unitSection: { flex: 1 },
+  chipsRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.md },
   chip: {
-    paddingHorizontal: 16, paddingVertical: 8, borderRadius: radius.full,
+    paddingHorizontal: 14, paddingVertical: 6, borderRadius: radius.full,
     borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.surface,
   },
   chipSelected: { backgroundColor: colors.primary },
-  chipText: { fontFamily: 'Cairo_600SemiBold', fontSize: 13, color: colors.primary },
+  chipText: { fontFamily: 'Cairo_600SemiBold', fontSize: 12, color: colors.primary },
   chipTextSelected: { color: '#FFFFFF' },
-  imageRow: { flexDirection: 'row-reverse', gap: spacing.sm, marginBottom: spacing.md },
-  imageSlot: {
-    width: 80, height: 80, borderRadius: radius.lg,
-    borderWidth: 2, borderColor: colors.border, borderStyle: 'dashed',
-    alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceDim,
-  },
-  imagePlus: { fontSize: 28, color: colors.textMuted },
-  imageCheck: { fontSize: 24, color: colors.success },
-  priceRow: { flexDirection: 'row-reverse', gap: spacing.sm },
-  unitSelector: { flex: 1 },
-  unitRow: { flexDirection: 'row-reverse', gap: 4, marginBottom: spacing.md },
-  unitChip: {
-    paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
-  },
-  unitChipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
-  unitText: { fontFamily: 'Cairo_600SemiBold', fontSize: 11, color: colors.textSecondary },
-  unitTextSelected: { color: '#FFFFFF' },
-  togglesSection: { marginBottom: spacing.lg },
   toggleRow: {
     flexDirection: 'row-reverse', alignItems: 'center', gap: spacing.sm,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.lg,
   },
   toggleLabel: { fontFamily: 'Cairo_400Regular', fontSize: 15, color: colors.textPrimary },
-  switch: {
+  toggleSwitch: {
     width: 50, height: 28, borderRadius: 14,
     backgroundColor: colors.border, justifyContent: 'center', paddingHorizontal: 2,
   },
-  switchOn: { backgroundColor: colors.primary },
-  switchThumb: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF' },
-  switchThumbOn: { alignSelf: 'flex-end' },
-  voiceSection: { alignItems: 'center', marginBottom: spacing.lg },
-  micButton: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
-  },
-  micRecording: { backgroundColor: colors.error },
-  micIcon: { fontSize: 28 },
-  voiceLabel: {
-    fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.textMuted, marginTop: 8,
-  },
+  toggleSwitchOn: { backgroundColor: colors.primary },
+  toggleThumb: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF' },
+  toggleThumbOn: { alignSelf: 'flex-end' },
 });

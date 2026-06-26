@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity, Alert,
   KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard,
-  ScrollView,
+  ScrollView, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -16,13 +16,13 @@ import { radius, spacing } from '../../constants/spacing';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const login = useAuthStore((s) => s.login);
+  const { loginAsBuyer, loginAsFarmer } = useAuthStore();
   const [step, setStep] = useState<'info' | 'otp'>('info');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState(['', '', '', '']);
   const [loading, setLoading] = useState(false);
-  const [foundProfile, setFoundProfile] = useState<any>(null);
+  const [foundAccount, setFoundAccount] = useState<{ type: 'buyer' | 'farmer'; data: any } | null>(null);
   const otpRefs = useRef<(TextInput | null)[]>([]);
 
   const handleFindAccount = async () => {
@@ -32,34 +32,58 @@ export default function LoginScreen() {
 
     try {
       const cleanPhone = phone.replace(/^0+/, '');
-      const { data: profiles, error } = await supabase
-        .from('profiles')
+
+      // Search farmers table by whatsapp_number
+      const { data: farmers, error: farmerError } = await supabase
+        .from('farmers')
+        .select('*')
+        .or(`whatsapp_number.ilike.%${cleanPhone}%`)
+        .limit(5);
+
+      if (farmerError) {
+        Alert.alert('خطأ', farmerError.message);
+        setLoading(false);
+        return;
+      }
+
+      if (farmers && farmers.length > 0) {
+        // Found in farmers table
+        setFoundAccount({ type: 'farmer', data: farmers[0] });
+        setStep('otp');
+        setLoading(false);
+        return;
+      }
+
+      // Search users table by phone
+      const { data: users, error: userError } = await supabase
+        .from('users')
         .select('*')
         .or(`phone.ilike.%${cleanPhone}%`)
-        .ilike('name', `%${name.trim()}%`)
-        .limit(1);
+        .limit(5);
 
-      if (error) {
-        Alert.alert('خطأ', error.message);
+      if (userError) {
+        Alert.alert('خطأ', userError.message);
         setLoading(false);
         return;
       }
 
-      if (!profiles || profiles.length === 0) {
-        Alert.alert(
-          'الحساب غير موجود',
-          'لم نعثر على حساب بهذا الاسم والرقم.',
-          [
-            { text: 'إنشاء حساب', onPress: () => router.push('/(auth)/register-buyer') },
-            { text: 'حاول مرة أخرى', style: 'cancel' },
-          ]
-        );
+      if (users && users.length > 0) {
+        // Found in users table
+        setFoundAccount({ type: 'buyer', data: users[0] });
+        setStep('otp');
         setLoading(false);
         return;
       }
 
-      setFoundProfile(profiles[0]);
-      setStep('otp');
+      // Not found
+      Alert.alert(
+        'الحساب غير موجود',
+        'لم نعثر على حساب بهذا الرقم.',
+        [
+          { text: 'إنشاء حساب', onPress: () => router.push('/(auth)/register-buyer') },
+          { text: 'حاول مرة أخرى', style: 'cancel' },
+        ]
+      );
     } catch (err: any) {
       Alert.alert('خطأ', err?.message || 'حدث خطأ');
     } finally {
@@ -74,8 +98,11 @@ export default function LoginScreen() {
       return;
     }
 
+    if (!foundAccount) return;
     setLoading(true);
+
     try {
+      // Sign in anonymously via Supabase auth
       const { data: authData, error: authError } = await supabase.auth.signInAnonymously();
       if (authError) {
         Alert.alert('خطأ', authError.message);
@@ -83,35 +110,33 @@ export default function LoginScreen() {
         return;
       }
 
-      if (authData.user) {
-        await supabase.from('profiles').upsert({
-          id: authData.user.id,
-          name: foundProfile.name,
-          phone: foundProfile.phone,
-          city: foundProfile.city,
-          address: foundProfile.address,
-          role: foundProfile.role,
-          avatar_url: foundProfile.avatar_url,
-          farm_name: foundProfile.farm_name,
-          specialty: foundProfile.specialty,
-        });
+      const authUserId = authData.user?.id;
+      if (!authUserId) {
+        Alert.alert('خطأ', 'فشل تسجيل الدخول');
+        setLoading(false);
+        return;
       }
 
-      const userRole = (foundProfile.role as 'buyer' | 'farmer') || 'buyer';
-      login(
-        {
-          id: authData.user?.id || foundProfile.id,
-          name: foundProfile.name,
-          phone: foundProfile.phone || '',
-          role: userRole,
-          avatar: foundProfile.avatar_url,
-          city: foundProfile.city,
-          address: foundProfile.address,
-        },
-        userRole
-      );
+      if (foundAccount.type === 'farmer') {
+        const farmerData = foundAccount.data;
+        // Update farmer's user_id if not set
+        if (!farmerData.user_id) {
+          await supabase
+            .from('farmers')
+            .update({ user_id: authUserId })
+            .eq('id', farmerData.id);
+        }
 
-      router.replace(userRole === 'farmer' ? '/(farmer)' : '/(buyer)');
+        loginAsFarmer(
+          { id: authUserId, full_name: farmerData.owner_name, phone: farmerData.whatsapp_number },
+          farmerData
+        );
+        router.replace('/(farmer)');
+      } else {
+        const userData = foundAccount.data;
+        loginAsBuyer(userData);
+        router.replace('/(buyer)');
+      }
     } catch (err: any) {
       Alert.alert('خطأ', err?.message || 'حدث خطأ');
     } finally {

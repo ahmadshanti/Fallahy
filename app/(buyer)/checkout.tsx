@@ -1,219 +1,420 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+  Image,
+  StatusBar,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import Button from '../../components/ui/Button';
 import { colors } from '../../constants/colors';
-import { radius, spacing } from '../../constants/spacing';
-import { useCartStore } from '../../store/cartStore';
 import { useAuthStore } from '../../store/authStore';
-import { useCreateOrder } from '../../hooks/useOrders';
+import { useCartStore } from '../../store/cartStore';
+import { createOrder } from '../../lib/orders';
+import { getOrCreateConversation, sendMessage } from '../../lib/chat';
+import { sendNotification } from '../../lib/notifications';
 
 export default function CheckoutScreen() {
   const router = useRouter();
-  const { items, total, savings, clear } = useCartStore();
-  const { user } = useAuthStore();
-  const createOrder = useCreateOrder();
-  const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [deliveryTime, setDeliveryTime] = useState('asap');
-  const [deliveryType, setDeliveryType] = useState('delivery');
+  const { user, buyerId } = useAuthStore();
+  const items = useCartStore((s) => s.items);
+  const getTotal = useCartStore((s) => s.getTotal);
+  const getFarmerId = useCartStore((s) => s.getFarmerId);
+  const clear = useCartStore((s) => s.clear);
 
-  const cartTotal = total();
-  const cartSavings = savings();
+  const [address, setAddress] = useState(user?.city || '');
+  const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const total = getTotal();
+  const farmerId = getFarmerId();
 
   const handleConfirm = async () => {
-    if (!user) return;
+    if (!buyerId || !farmerId) {
+      Alert.alert('خطأ', 'يرجى تسجيل الدخول أولا');
+      return;
+    }
+    if (!address.trim()) {
+      Alert.alert('خطأ', 'يرجى إدخال عنوان التوصيل');
+      return;
+    }
+    if (items.length === 0) {
+      Alert.alert('خطأ', 'السلة فارغة');
+      return;
+    }
+
     try {
-      const farmerId = items[0]?.product.farmerId;
-      const result = await createOrder.mutateAsync({
-        buyer_id: user.id,
+      setSubmitting(true);
+
+      const orderItems = items.map((item) => ({
+        product_id: item.product.id,
+        quantity: item.quantity,
+        unit_price:
+          item.saleType === 'wholesale'
+            ? item.product.wholesale_price || 0
+            : item.product.retail_price || 0,
+        sale_type: item.saleType,
+      }));
+
+      const order = await createOrder({
+        buyer_id: buyerId,
         farmer_id: farmerId,
-        total: cartTotal,
-        delivery_type: deliveryType,
-        payment_method: paymentMethod,
-        address: user.address || 'رام الله',
-        items: items.map((i) => ({
-          product_id: i.product.id,
-          product_name: i.product.name,
-          quantity: i.quantity,
-          price: i.priceType === 'wholesale' ? i.product.wholesalePrice : i.product.retailPrice,
-          price_type: i.priceType,
-        })),
+        total_price: total,
+        delivery_address: address.trim(),
+        notes: notes.trim() || undefined,
+        items: orderItems,
       });
+
+      // Send auto-message to farmer
+      try {
+        const itemsList = items.map((i) => `${i.product.name} x${i.quantity}`).join(', ');
+        const conv = await getOrCreateConversation(buyerId, farmerId, order.id);
+        await sendMessage(conv.id, buyerId, 'buyer', `طلب جديد: ${itemsList}`);
+      } catch {
+        // Non-critical, continue
+      }
+
+      // Send notification to farmer
+      try {
+        const farmerUserId = farmerId; // farmer_id in the farmers table
+        await sendNotification(
+          farmerUserId,
+          'new_order',
+          'طلب جديد',
+          `لديك طلب جديد بقيمة ${total.toFixed(2)} د.أ`,
+          { order_id: order.id }
+        );
+      } catch {
+        // Non-critical
+      }
+
       clear();
-      router.replace(`/(buyer)/order-tracking/${result.orderNumber}`);
-    } catch (error) {
-      Alert.alert('خطأ', 'حدث خطأ أثناء إنشاء الطلب. حاول مرة أخرى.');
+      router.replace(`/(buyer)/order-tracking/${order.id}`);
+    } catch (err) {
+      console.error('Checkout error:', err);
+      Alert.alert('خطأ', 'تعذر إنشاء الطلب. حاول مرة أخرى.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <View style={{ width: 40 }} />
+        <Text style={styles.headerTitle}>إتمام الطلب</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>إتمام الطلب</Text>
-        <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-        {/* Address */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.changeLink}>تغيير</Text>
-            <Text style={styles.sectionTitle}>عنوان التوصيل</Text>
-          </View>
-          <View style={styles.addressCard}>
-            <Ionicons name="location-outline" size={20} color={colors.primary} />
-            <Text style={styles.addressText}>{user?.address || 'رام الله، شارع الإرسال'}</Text>
-          </View>
-        </View>
-
-        {/* Delivery Time */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>وقت التوصيل</Text>
-          <View style={styles.optionsRow}>
-            <TouchableOpacity
-              style={[styles.option, deliveryTime === 'asap' && styles.optionActive]}
-              onPress={() => setDeliveryTime('asap')}
-            >
-              <Text style={[styles.optionText, deliveryTime === 'asap' && styles.optionTextActive]}>في أقرب وقت</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.option, deliveryTime === 'scheduled' && styles.optionActive]}
-              onPress={() => setDeliveryTime('scheduled')}
-            >
-              <Text style={[styles.optionText, deliveryTime === 'scheduled' && styles.optionTextActive]}>حدد وقتاً</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Payment */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>طريقة الدفع</Text>
-          {[
-            { key: 'cash', label: 'نقداً عند الاستلام', icon: 'cash-outline' as const },
-            { key: 'card', label: 'بطاقة ائتمان', icon: 'card-outline' as const },
-            { key: 'wallet', label: 'محفظة إلكترونية', icon: 'phone-portrait-outline' as const },
-          ].map((method) => (
-            <TouchableOpacity
-              key={method.key}
-              style={[styles.paymentOption, paymentMethod === method.key && styles.paymentOptionActive]}
-              onPress={() => setPaymentMethod(method.key)}
-            >
-              <View style={[styles.radio, paymentMethod === method.key && styles.radioActive]} />
-              <Ionicons name={method.icon} size={20} color={colors.textPrimary} />
-              <Text style={styles.paymentLabel}>{method.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Savings Highlight */}
-        {cartSavings > 0 && (
-          <View style={styles.savingsBox}>
-            <Text style={styles.savingsText}>ستوفر {cartSavings.toFixed(2)} شيكل بهذا الطلب</Text>
-          </View>
-        )}
-
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* Order Summary */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>ملخص الطلب</Text>
           {items.map((item) => {
-            const price = item.priceType === 'wholesale' ? item.product.wholesalePrice : item.product.retailPrice;
+            const price =
+              item.saleType === 'wholesale'
+                ? item.product.wholesale_price || 0
+                : item.product.retail_price || 0;
             return (
-              <View key={item.id} style={styles.summaryItem}>
-                <Text style={styles.summaryPrice}>₪{(price * item.quantity).toFixed(2)}</Text>
-                <Text style={styles.summaryName}>{item.product.name} × {item.quantity}</Text>
+              <View key={item.id + item.saleType} style={styles.summaryItem}>
+                <Text style={styles.summaryPrice}>{(price * item.quantity).toFixed(2)} د.أ</Text>
+                <View style={styles.summaryRight}>
+                  {item.product.image_url ? (
+                    <Image source={{ uri: item.product.image_url }} style={styles.summaryImage} />
+                  ) : (
+                    <View style={[styles.summaryImage, styles.placeholderImg]}>
+                      <Ionicons name="image-outline" size={16} color={colors.textMuted} />
+                    </View>
+                  )}
+                  <View style={styles.summaryInfo}>
+                    <Text style={styles.summaryName} numberOfLines={1}>{item.product.name}</Text>
+                    <Text style={styles.summaryQty}>
+                      {item.quantity} x {price.toFixed(2)} ({item.saleType === 'wholesale' ? 'جملة' : 'مفرق'})
+                    </Text>
+                  </View>
+                </View>
               </View>
             );
           })}
           <View style={styles.totalRow}>
-            <Text style={styles.totalValue}>₪{cartTotal.toFixed(2)}</Text>
+            <Text style={styles.totalPrice}>{total.toFixed(2)} د.أ</Text>
             <Text style={styles.totalLabel}>الإجمالي</Text>
           </View>
         </View>
+
+        {/* Delivery Address */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>عنوان التوصيل</Text>
+          <TextInput
+            style={styles.input}
+            value={address}
+            onChangeText={setAddress}
+            placeholder="أدخل عنوان التوصيل الكامل"
+            placeholderTextColor={colors.textMuted}
+            textAlign="right"
+            multiline
+          />
+        </View>
+
+        {/* Notes */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>ملاحظات (اختياري)</Text>
+          <TextInput
+            style={[styles.input, styles.notesInput]}
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="أضف ملاحظات للمزارع..."
+            placeholderTextColor={colors.textMuted}
+            textAlign="right"
+            multiline
+          />
+        </View>
+
+        {/* Payment Method */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>طريقة الدفع</Text>
+          <View style={styles.paymentCard}>
+            <View style={styles.paymentRight}>
+              <View style={styles.paymentIcon}>
+                <Ionicons name="cash-outline" size={24} color={colors.primary} />
+              </View>
+              <View>
+                <Text style={styles.paymentTitle}>الدفع عند الاستلام</Text>
+                <Text style={styles.paymentDesc}>ادفع نقدا عند تسليم الطلب</Text>
+              </View>
+            </View>
+            <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+          </View>
+        </View>
+
+        <View style={{ height: 120 }} />
       </ScrollView>
 
+      {/* Bottom Confirm */}
       <View style={styles.bottomBar}>
-        <Button
-          title={createOrder.isPending ? 'جاري الإرسال...' : 'تأكيد الطلب'}
+        <TouchableOpacity
+          style={[styles.confirmBtn, submitting && styles.confirmBtnDisabled]}
           onPress={handleConfirm}
-          fullWidth
-          size="lg"
-          disabled={createOrder.isPending}
-        />
+          disabled={submitting}
+        >
+          {submitting ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle" size={20} color="#fff" />
+              <Text style={styles.confirmBtnText}>تأكيد الطلب</Text>
+            </>
+          )}
+        </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
-  backIcon: { fontSize: 24 },
-  headerTitle: { fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textPrimary },
-  section: { paddingHorizontal: spacing.md, marginTop: spacing.lg },
-  sectionHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: spacing.sm,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 50,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+    backgroundColor: colors.background,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 20,
+    color: colors.textPrimary,
+    writingDirection: 'rtl',
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  section: {
+    marginBottom: 20,
   },
   sectionTitle: {
-    fontFamily: 'Cairo_700Bold', fontSize: 16, color: colors.textPrimary,
-    textAlign: 'right', writingDirection: 'rtl', marginBottom: spacing.sm,
-  },
-  changeLink: { fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.primary },
-  addressCard: {
-    flexDirection: 'row-reverse', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.lg,
-  },
-  addressIcon: { fontSize: 20 },
-  addressText: { fontFamily: 'Cairo_400Regular', fontSize: 15, color: colors.textPrimary },
-  optionsRow: { flexDirection: 'row', gap: spacing.sm },
-  option: {
-    flex: 1, height: 44, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.surface,
-  },
-  optionActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  optionText: { fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.textSecondary },
-  optionTextActive: { color: '#FFFFFF' },
-  paymentOption: {
-    flexDirection: 'row-reverse', alignItems: 'center', gap: spacing.sm,
-    padding: spacing.md, backgroundColor: colors.surface, borderRadius: radius.lg,
-    marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border,
-  },
-  paymentOptionActive: { borderColor: colors.primary, backgroundColor: '#F5F9F2' },
-  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: colors.border },
-  radioActive: { borderColor: colors.primary, backgroundColor: colors.primary },
-  paymentIcon: { fontSize: 20 },
-  paymentLabel: { fontFamily: 'Cairo_600SemiBold', fontSize: 15, color: colors.textPrimary },
-  savingsBox: {
-    backgroundColor: '#E8F5E1', borderRadius: radius.lg,
-    padding: spacing.md, marginHorizontal: spacing.md, marginTop: spacing.lg,
-  },
-  savingsText: {
-    fontFamily: 'Cairo_700Bold', fontSize: 15, color: colors.success,
-    textAlign: 'center',
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 16,
+    color: colors.textPrimary,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    marginBottom: 10,
   },
   summaryItem: {
-    flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 8,
   },
-  summaryName: { fontFamily: 'Cairo_400Regular', fontSize: 14, color: colors.textSecondary, textAlign: 'right' },
-  summaryPrice: { fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.textPrimary },
+  summaryRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  summaryImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    resizeMode: 'cover',
+  },
+  placeholderImg: {
+    backgroundColor: colors.surfaceDim,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  summaryInfo: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  summaryName: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 13,
+    color: colors.textPrimary,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  summaryQty: {
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 11,
+    color: colors.textMuted,
+    writingDirection: 'rtl',
+  },
+  summaryPrice: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 14,
+    color: colors.primary,
+  },
   totalRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    marginTop: 4,
   },
-  totalLabel: { fontFamily: 'Cairo_700Bold', fontSize: 16, color: colors.textPrimary },
-  totalValue: { fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.primary },
+  totalLabel: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 16,
+    color: colors.textPrimary,
+    writingDirection: 'rtl',
+  },
+  totalPrice: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 20,
+    color: colors.primary,
+  },
+  input: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 14,
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 14,
+    color: colors.textPrimary,
+    writingDirection: 'rtl',
+    minHeight: 50,
+  },
+  notesInput: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  paymentCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  paymentRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  paymentIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primary + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  paymentTitle: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 14,
+    color: colors.textPrimary,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  paymentDesc: {
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 11,
+    color: colors.textMuted,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
   bottomBar: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    padding: spacing.md, paddingBottom: 30,
-    backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    paddingBottom: 30,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  confirmBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    paddingVertical: 16,
+    borderRadius: 14,
+  },
+  confirmBtnDisabled: {
+    opacity: 0.6,
+  },
+  confirmBtnText: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 16,
+    color: '#fff',
   },
 });

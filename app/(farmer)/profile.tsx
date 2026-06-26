@@ -1,18 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Alert, Image as RNImage,
+  StyleSheet, Alert, Image as RNImage, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import Avatar from '../../components/ui/Avatar';
 import Button from '../../components/ui/Button';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 import { useAuthStore } from '../../store/authStore';
-import { useFarmerMetrics } from '../../hooks/useEarnings';
+import { updateFarmerProfile } from '../../lib/farmers';
+import { getProductsByFarmer } from '../../lib/products';
+import { getOrdersByFarmer } from '../../lib/orders';
 import { supabase } from '../../lib/supabase';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
@@ -20,23 +21,52 @@ type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 const menuItems: { label: string; icon: IoniconsName; route?: string }[] = [
   { label: 'معلومات المزرعة', icon: 'home-outline' },
   { label: 'منتجاتي', icon: 'cube-outline', route: '/(farmer)/products' },
-  { label: 'التحليلات', icon: 'bar-chart-outline', route: '/(farmer)/analytics' },
-  { label: 'التنبيهات', icon: 'notifications-outline', route: '/(farmer)/alerts' },
+  { label: 'أشجاري', icon: 'leaf-outline', route: '/(farmer)/trees' },
+  { label: 'طلبات القطف', icon: 'hand-left-outline', route: '/(farmer)/pick-requests' },
   { label: 'المساعدة', icon: 'help-circle-outline' },
 ];
 
 export default function FarmerProfileScreen() {
   const router = useRouter();
-  const { user, logout, updateUser } = useAuthStore();
-  const { data: metrics } = useFarmerMetrics(user?.id || '');
+  const { farmer, user, logout, updateUser } = useAuthStore();
+  const farmerId = useAuthStore((s) => s.farmerId);
 
   const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState(user?.name || '');
-  const [editPhone, setEditPhone] = useState(user?.phone || '');
-  const [editCity, setEditCity] = useState(user?.city || '');
-  const [editAddress, setEditAddress] = useState(user?.address || '');
+  const [editOwnerName, setEditOwnerName] = useState(farmer?.owner_name || '');
+  const [editFarmName, setEditFarmName] = useState(farmer?.farm_name || '');
+  const [editCity, setEditCity] = useState(farmer?.city || '');
+  const [editAbout, setEditAbout] = useState(farmer?.about || '');
+  const [editWhatsapp, setEditWhatsapp] = useState(farmer?.whatsapp_number || '');
   const [newAvatar, setNewAvatar] = useState<string | null>(null);
+  const [farmImages, setFarmImages] = useState<string[]>(farmer?.farm_images || []);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Stats
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [totalRevenue, setTotalRevenue] = useState(0);
+
+  useEffect(() => {
+    if (farmerId) loadStats();
+  }, [farmerId]);
+
+  const loadStats = async () => {
+    if (!farmerId) return;
+    try {
+      const [products, orders] = await Promise.all([
+        getProductsByFarmer(farmerId),
+        getOrdersByFarmer(farmerId),
+      ]);
+      setTotalProducts(products.length);
+      setTotalOrders(orders.length);
+      const revenue = orders
+        .filter((o: any) => o.status === 'delivered')
+        .reduce((sum: number, o: any) => sum + (o.total_price || 0), 0);
+      setTotalRevenue(revenue);
+    } catch (err) {
+      console.log('Stats error:', err);
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert('تسجيل الخروج', 'هل أنت متأكد؟', [
@@ -62,44 +92,82 @@ export default function FarmerProfileScreen() {
     }
   };
 
+  const pickFarmImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('تنبيه', 'يرجى السماح بالوصول للصور');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      const newUris = result.assets.map((a) => a.uri);
+      setFarmImages((prev) => [...prev, ...newUris]);
+    }
+  };
+
+  const uploadImage = async (uri: string, bucket: string, folder: string): Promise<string | null> => {
+    if (uri.startsWith('http')) return uri;
+    try {
+      const fileExt = uri.split('.').pop()?.split('?')[0] || 'jpg';
+      const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substr(2, 5)}.${fileExt}`;
+      const formData = new FormData();
+      formData.append('file', { uri, name: `image.${fileExt}`, type: `image/${fileExt}` } as any);
+      const { error } = await supabase.storage.from(bucket).upload(fileName, formData, { upsert: true });
+      if (!error) {
+        const { data } = supabase.storage.from(bucket).getPublicUrl(fileName);
+        return data.publicUrl;
+      }
+    } catch (e) {
+      console.log('Upload error:', e);
+    }
+    return null;
+  };
+
   const handleSave = async () => {
-    if (!user) return;
+    if (!farmerId) return;
     setIsSaving(true);
     try {
-      let avatarUrl = user.avatar;
-
+      let avatarUrl = farmer?.owner_avatar_url;
       if (newAvatar) {
-        const fileExt = newAvatar.split('.').pop()?.split('?')[0] || 'jpg';
-        const fileName = `${user.id}/avatar_${Date.now()}.${fileExt}`;
-        const formData = new FormData();
-        formData.append('file', { uri: newAvatar, name: `avatar.${fileExt}`, type: `image/${fileExt}` } as any);
-        const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, formData, { upsert: true });
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
-          avatarUrl = urlData.publicUrl;
+        const uploaded = await uploadImage(newAvatar, 'avatars', farmerId);
+        if (uploaded) avatarUrl = uploaded;
+      }
+
+      // Upload new farm images
+      const uploadedFarmImages: string[] = [];
+      for (const img of farmImages) {
+        if (img.startsWith('http')) {
+          uploadedFarmImages.push(img);
+        } else {
+          const uploaded = await uploadImage(img, 'farmer-images', farmerId);
+          if (uploaded) uploadedFarmImages.push(uploaded);
         }
       }
 
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          name: editName,
-          phone: editPhone,
-          city: editCity,
-          address: editAddress,
-          farm_name: editName,
-          avatar_url: avatarUrl,
-        })
-        .eq('id', user.id);
+      await updateFarmerProfile(farmerId, {
+        owner_name: editOwnerName,
+        farm_name: editFarmName,
+        city: editCity,
+        about: editAbout,
+        whatsapp_number: editWhatsapp,
+        owner_avatar_url: avatarUrl,
+        farm_images: uploadedFarmImages.length > 0 ? uploadedFarmImages : null,
+      });
 
-      if (error) throw error;
+      updateUser({
+        full_name: editOwnerName,
+        phone: editWhatsapp,
+      });
 
-      updateUser({ name: editName, phone: editPhone, city: editCity, address: editAddress, avatar: avatarUrl });
       setNewAvatar(null);
       setIsEditing(false);
       Alert.alert('', 'تم تحديث الملف الشخصي');
-    } catch {
-      Alert.alert('خطأ', 'فشل في حفظ التعديلات');
+    } catch (err: any) {
+      Alert.alert('خطأ', err?.message || 'فشل في حفظ التعديلات');
     } finally {
       setIsSaving(false);
     }
@@ -115,7 +183,7 @@ export default function FarmerProfileScreen() {
     }
   };
 
-  const displayAvatar = newAvatar || user?.avatar || '';
+  const displayAvatar = newAvatar || farmer?.owner_avatar_url || '';
 
   // Edit Mode
   if (isEditing) {
@@ -131,8 +199,8 @@ export default function FarmerProfileScreen() {
 
         <ScrollView contentContainerStyle={styles.editScroll} showsVerticalScrollIndicator={false}>
           <TouchableOpacity style={styles.editAvatarContainer} onPress={pickAvatar}>
-            {(newAvatar || displayAvatar) ? (
-              <RNImage source={{ uri: newAvatar || displayAvatar }} style={styles.editAvatarImage} />
+            {displayAvatar ? (
+              <RNImage source={{ uri: displayAvatar }} style={styles.editAvatarImage} />
             ) : (
               <View style={styles.editAvatarPlaceholder}>
                 <Ionicons name="person" size={40} color={colors.textMuted} />
@@ -144,13 +212,13 @@ export default function FarmerProfileScreen() {
           </TouchableOpacity>
 
           <View style={styles.editField}>
-            <Text style={styles.editLabel}>اسم المزرعة</Text>
-            <TextInput style={styles.editInput} value={editName} onChangeText={setEditName} textAlign="right" placeholder="اسم المزرعة" placeholderTextColor={colors.textMuted} />
+            <Text style={styles.editLabel}>اسم المالك</Text>
+            <TextInput style={styles.editInput} value={editOwnerName} onChangeText={setEditOwnerName} textAlign="right" placeholder="اسم المالك" placeholderTextColor={colors.textMuted} />
           </View>
 
           <View style={styles.editField}>
-            <Text style={styles.editLabel}>رقم الهاتف</Text>
-            <TextInput style={styles.editInput} value={editPhone} onChangeText={setEditPhone} textAlign="right" placeholder="رقم الهاتف" keyboardType="phone-pad" placeholderTextColor={colors.textMuted} />
+            <Text style={styles.editLabel}>اسم المزرعة</Text>
+            <TextInput style={styles.editInput} value={editFarmName} onChangeText={setEditFarmName} textAlign="right" placeholder="اسم المزرعة" placeholderTextColor={colors.textMuted} />
           </View>
 
           <View style={styles.editField}>
@@ -159,8 +227,40 @@ export default function FarmerProfileScreen() {
           </View>
 
           <View style={styles.editField}>
-            <Text style={styles.editLabel}>العنوان</Text>
-            <TextInput style={styles.editInput} value={editAddress} onChangeText={setEditAddress} textAlign="right" placeholder="الحي / الشارع" placeholderTextColor={colors.textMuted} />
+            <Text style={styles.editLabel}>رقم الواتساب</Text>
+            <TextInput style={styles.editInput} value={editWhatsapp} onChangeText={setEditWhatsapp} textAlign="right" placeholder="رقم الواتساب" keyboardType="phone-pad" placeholderTextColor={colors.textMuted} />
+          </View>
+
+          <View style={styles.editField}>
+            <Text style={styles.editLabel}>نبذة عن المزرعة</Text>
+            <TextInput
+              style={[styles.editInput, { height: 80, textAlignVertical: 'top', paddingTop: spacing.sm }]}
+              value={editAbout}
+              onChangeText={setEditAbout}
+              textAlign="right"
+              placeholder="تحدث عن مزرعتك..."
+              placeholderTextColor={colors.textMuted}
+              multiline
+            />
+          </View>
+
+          {/* Farm Images */}
+          <Text style={styles.editLabel}>صور المزرعة</Text>
+          <View style={styles.farmImagesRow}>
+            {farmImages.map((img, index) => (
+              <View key={index} style={styles.farmImageContainer}>
+                <RNImage source={{ uri: img }} style={styles.farmImageThumb} />
+                <TouchableOpacity
+                  style={styles.removeFarmImage}
+                  onPress={() => setFarmImages((prev) => prev.filter((_, i) => i !== index))}
+                >
+                  <Ionicons name="close-circle" size={20} color={colors.error} />
+                </TouchableOpacity>
+              </View>
+            ))}
+            <TouchableOpacity style={styles.addFarmImage} onPress={pickFarmImage}>
+              <Ionicons name="add" size={28} color={colors.textMuted} />
+            </TouchableOpacity>
           </View>
 
           <Button title="حفظ التعديلات" onPress={handleSave} fullWidth size="lg" loading={isSaving} />
@@ -176,19 +276,25 @@ export default function FarmerProfileScreen() {
         <View style={styles.profileCard}>
           <TouchableOpacity onPress={() => setIsEditing(true)}>
             <View style={styles.avatarWrapper}>
-              <Avatar uri={displayAvatar} size={90} />
+              {displayAvatar ? (
+                <RNImage source={{ uri: displayAvatar }} style={styles.avatarImage} />
+              ) : (
+                <View style={[styles.avatarImage, styles.avatarPlaceholder]}>
+                  <Ionicons name="person" size={36} color={colors.primary} />
+                </View>
+              )}
               <View style={styles.avatarEditBadge}>
                 <Ionicons name="pencil" size={12} color="#FFFFFF" />
               </View>
             </View>
           </TouchableOpacity>
 
-          <Text style={styles.farmName}>{user?.name || ''}</Text>
-          {user?.city && <Text style={styles.farmCity}>{user.city}</Text>}
-          {user?.phone && (
+          <Text style={styles.farmName}>{farmer?.farm_name || farmer?.owner_name || ''}</Text>
+          {farmer?.city && <Text style={styles.farmCity}>{farmer.city}</Text>}
+          {farmer?.whatsapp_number && (
             <View style={styles.phoneRow}>
               <Ionicons name="logo-whatsapp" size={16} color="#25D366" />
-              <Text style={styles.phoneText}>{user.phone}</Text>
+              <Text style={styles.phoneText}>{farmer.whatsapp_number}</Text>
             </View>
           )}
         </View>
@@ -196,18 +302,18 @@ export default function FarmerProfileScreen() {
         {/* Stats */}
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{metrics?.totalProducts || 0}</Text>
+            <Text style={styles.statValue}>{totalProducts}</Text>
             <Text style={styles.statLabel}>منتج</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{metrics?.ordersToday || 0}</Text>
-            <Text style={styles.statLabel}>طلبات اليوم</Text>
+            <Text style={styles.statValue}>{totalOrders}</Text>
+            <Text style={styles.statLabel}>طلب</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{metrics?.salesToday || 0} ₪</Text>
-            <Text style={styles.statLabel}>مبيعات اليوم</Text>
+            <Text style={styles.statValue}>{totalRevenue} ₪</Text>
+            <Text style={styles.statLabel}>الإيرادات</Text>
           </View>
         </View>
 
@@ -281,6 +387,18 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border, height: 50,
     paddingHorizontal: spacing.md, writingDirection: 'rtl',
   },
+  farmImagesRow: {
+    flexDirection: 'row-reverse', flexWrap: 'wrap', gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  farmImageContainer: { position: 'relative' },
+  farmImageThumb: { width: 80, height: 80, borderRadius: radius.md },
+  removeFarmImage: { position: 'absolute', top: -6, left: -6 },
+  addFarmImage: {
+    width: 80, height: 80, borderRadius: radius.md,
+    borderWidth: 2, borderColor: colors.border, borderStyle: 'dashed',
+    alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceDim,
+  },
 
   // Profile View
   profileCard: {
@@ -289,6 +407,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface, borderRadius: radius.xl,
   },
   avatarWrapper: { position: 'relative', marginBottom: spacing.sm },
+  avatarImage: { width: 90, height: 90, borderRadius: 45 },
+  avatarPlaceholder: {
+    backgroundColor: '#E8F5E1', alignItems: 'center', justifyContent: 'center',
+  },
   avatarEditBadge: {
     position: 'absolute', bottom: 2, right: 2,
     width: 26, height: 26, borderRadius: 13,

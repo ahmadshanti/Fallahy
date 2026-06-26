@@ -10,11 +10,11 @@ const farmerTabs: { name: string; title: string; icon: IoniconsName; iconFocused
   { name: 'index', title: 'الرئيسية', icon: 'home-outline', iconFocused: 'home' },
   { name: 'products', title: 'منتجاتي', icon: 'cube-outline', iconFocused: 'cube' },
   { name: 'orders', title: 'طلباتي', icon: 'bag-outline', iconFocused: 'bag' },
-  { name: 'earnings', title: 'أرباحي', icon: 'wallet-outline', iconFocused: 'wallet' },
+  { name: 'chat', title: 'دردشاتي', icon: 'chatbubble-outline', iconFocused: 'chatbubble' },
   { name: 'profile', title: 'حسابي', icon: 'person-outline', iconFocused: 'person' },
 ];
 
-const hiddenScreens = ['add-product', 'flash-deal', 'analytics', 'alerts'];
+const hiddenScreens = ['add-product', 'flash-deal', 'analytics', 'alerts', 'trees', 'pick-requests', 'chat-thread/[id]', 'earnings'];
 
 export default function FarmerLayout() {
   return (

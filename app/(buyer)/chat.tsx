@@ -1,195 +1,257 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  FlatList,
+  Image,
+  ActivityIndicator,
+  StatusBar,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { colors } from '../../constants/colors';
-import { radius, spacing } from '../../constants/spacing';
+import { useAuthStore } from '../../store/authStore';
+import { getConversationsByUser } from '../../lib/chat';
+import { Conversation } from '../../types';
 
-interface Message {
-  id: string;
-  text: string;
-  isUser: boolean;
-  timestamp: string;
-}
+export default function ConversationsScreen() {
+  const router = useRouter();
+  const { buyerId } = useAuthStore();
 
-const quickQuestions = [
-  'متى يوصل طلبي؟',
-  'شو الفرق بين العضوي والعادي؟',
-  'كيف أتواصل مع المزارع؟',
-];
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [loading, setLoading] = useState(true);
 
-function getResponse(text: string): string {
-  switch (text) {
-    case 'متى يوصل طلبي؟':
-      return 'يمكنك تتبع طلبك من صفحة \'طلباتي\'. اضغط على الطلب لمعرفة حالته ووقت الوصول المتوقع.';
-    case 'شو الفرق بين العضوي والعادي؟':
-      return 'المنتج العضوي يُزرع بدون مبيدات كيميائية. المنتجات العضوية عليها علامة \'عضوي\' خضراء في التطبيق.';
-    case 'كيف أتواصل مع المزارع؟':
-      return 'يمكنك التواصل مع المزارع من صفحة المنتج أو من صفحة تتبع الطلب. اضغط على \'اتصل بالمزارع\' أو \'واتساب\'.';
-    default:
-      return 'شكراً لرسالتك! حالياً يمكنك التواصل معنا عبر البريد: support@fallahy.app';
-  }
-}
+  useEffect(() => {
+    loadConversations();
+  }, []);
 
-export default function ChatScreen() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '0',
-      text: 'أهلاً! أنا مساعد فلاحي. كيف ممكن أساعدك؟',
-      isUser: false,
-      timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-    },
-  ]);
-  const [input, setInput] = useState('');
-  const flatListRef = useRef<FlatList>(null);
+  const loadConversations = async () => {
+    if (!buyerId) return;
+    try {
+      setLoading(true);
+      const data = await getConversationsByUser(buyerId, 'buyer');
+      setConversations(data);
+    } catch (err) {
+      console.error('Conversations load error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const sendMessage = (text: string) => {
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      text,
-      isUser: true,
-      timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-    };
+  const formatTime = (dateStr: string) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'الآن';
+    if (mins < 60) return `${mins} د`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} س`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days} ي`;
+    return date.toLocaleDateString('ar');
+  };
 
-    setMessages((prev) => [...prev, userMsg]);
-    setInput('');
+  const renderConversation = ({ item }: { item: Conversation }) => {
+    const farmerName = item.farmers?.farm_name || 'مزارع';
+    const farmerAvatar = item.farmers?.owner_avatar_url;
 
-    setTimeout(() => {
-      const response = getResponse(text);
-      const aiMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        text: response,
-        isUser: false,
-        timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages((prev) => [...prev, aiMsg]);
-    }, 800);
+    return (
+      <TouchableOpacity
+        style={styles.convRow}
+        onPress={() => router.push(`/(buyer)/chat-thread/${item.id}`)}
+        activeOpacity={0.7}
+      >
+        {/* Left: time + unread */}
+        <View style={styles.convLeft}>
+          <Text style={styles.convTime}>{formatTime(item.lastMessageTime || '')}</Text>
+          {(item.unreadCount || 0) > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadText}>{item.unreadCount}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Center: name + message */}
+        <View style={styles.convCenter}>
+          <Text style={styles.convName} numberOfLines={1}>{farmerName}</Text>
+          <Text
+            style={[
+              styles.convMessage,
+              (item.unreadCount || 0) > 0 && styles.convMessageUnread,
+            ]}
+            numberOfLines={1}
+          >
+            {item.lastMessage || 'لا توجد رسائل'}
+          </Text>
+        </View>
+
+        {/* Right: avatar */}
+        <View style={styles.convAvatarWrapper}>
+          {farmerAvatar ? (
+            <Image source={{ uri: farmerAvatar }} style={styles.convAvatar} />
+          ) : (
+            <View style={[styles.convAvatar, styles.placeholderAvatar]}>
+              <Ionicons name="person" size={22} color={colors.textMuted} />
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <Text style={styles.pageTitle}>الدردشة</Text>
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>دردشاتي</Text>
+      </View>
 
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.chatList}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
-        renderItem={({ item }) => (
-          <View style={[styles.bubbleRow, item.isUser ? styles.userRow : styles.aiRow]}>
-            {!item.isUser && (
-              <View style={styles.aiAvatar}>
-                <Ionicons name="leaf" size={14} color={colors.primary} />
-              </View>
-            )}
-            <View style={[styles.bubble, item.isUser ? styles.userBubble : styles.aiBubble]}>
-              <Text style={[styles.bubbleText, item.isUser && styles.userBubbleText]}>
-                {item.text}
-              </Text>
-              <Text style={[styles.timestamp, item.isUser && styles.userTimestamp]}>
-                {item.timestamp}
-              </Text>
-            </View>
-          </View>
-        )}
-      />
-
-      {/* Quick Questions */}
-      {messages.length <= 1 && (
-        <View style={styles.quickRow}>
-          {quickQuestions.map((q) => (
-            <TouchableOpacity key={q} style={styles.quickChip} onPress={() => sendMessage(q)}>
-              <Text style={styles.quickText}>{q}</Text>
-            </TouchableOpacity>
-          ))}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
+      ) : conversations.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="chatbubbles-outline" size={48} color={colors.textMuted} />
+          <Text style={styles.emptyTitle}>لا توجد محادثات</Text>
+          <Text style={styles.emptySubtitle}>
+            ابدأ محادثة مع أي مزارع من صفحة المنتج أو المزرعة
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={conversations}
+          renderItem={renderConversation}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+        />
       )}
-
-      {/* Input Bar */}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.inputBar}>
-          <TouchableOpacity style={styles.micBtn}>
-            <Ionicons name="mic-outline" size={20} color={colors.textPrimary} />
-          </TouchableOpacity>
-          <TextInput
-            style={styles.input}
-            placeholder="اكتب رسالتك..."
-            placeholderTextColor={colors.textMuted}
-            value={input}
-            onChangeText={setInput}
-            textAlign="right"
-          />
-          <TouchableOpacity style={styles.sendBtn} onPress={() => input.trim() && sendMessage(input.trim())}>
-            <Ionicons name="send" size={18} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  pageTitle: {
-    fontFamily: 'Cairo_700Bold', fontSize: 20, color: colors.textPrimary,
-    textAlign: 'center', paddingVertical: spacing.sm,
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
-  chatList: { padding: spacing.md, paddingBottom: 8 },
-  bubbleRow: { flexDirection: 'row', marginBottom: spacing.sm, alignItems: 'flex-end' },
-  userRow: { justifyContent: 'flex-end' },
-  aiRow: { justifyContent: 'flex-start' },
-  aiAvatar: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: colors.surfaceDim, alignItems: 'center', justifyContent: 'center',
-    marginRight: 6,
+  header: {
+    paddingTop: 50,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+    backgroundColor: colors.background,
   },
-  bubble: { maxWidth: '75%', padding: 12, borderRadius: 16 },
-  userBubble: {
-    backgroundColor: colors.primary,
-    borderBottomRightRadius: 4,
-  },
-  aiBubble: {
-    backgroundColor: colors.surface,
-    borderBottomLeftRadius: 4,
-  },
-  bubbleText: {
-    fontFamily: 'Cairo_400Regular', fontSize: 15, color: colors.textPrimary,
-    textAlign: 'right', writingDirection: 'rtl', lineHeight: 24,
-  },
-  userBubbleText: { color: '#FFFFFF' },
-  timestamp: {
-    fontFamily: 'Cairo_400Regular', fontSize: 10, color: colors.textMuted,
-    textAlign: 'right', marginTop: 4,
-  },
-  userTimestamp: { color: 'rgba(255,255,255,0.6)' },
-  quickRow: {
-    flexDirection: 'row-reverse', flexWrap: 'wrap',
-    paddingHorizontal: spacing.md, gap: spacing.sm, marginBottom: spacing.sm,
-  },
-  quickChip: {
-    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.primary,
-    borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 8,
-  },
-  quickText: { fontFamily: 'Cairo_600SemiBold', fontSize: 13, color: colors.primary },
-  inputBar: {
-    flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm, paddingBottom: 30,
-    backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border,
-    gap: spacing.sm,
-  },
-  input: {
-    flex: 1, height: 44, backgroundColor: colors.surfaceDim,
-    borderRadius: radius.full, paddingHorizontal: spacing.md,
-    fontFamily: 'Cairo_400Regular', fontSize: 15, color: colors.textPrimary,
+  headerTitle: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 22,
+    color: colors.textPrimary,
+    textAlign: 'right',
     writingDirection: 'rtl',
   },
-  micBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: colors.surfaceDim, alignItems: 'center', justifyContent: 'center',
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  sendBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+  },
+  convRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  convAvatarWrapper: {
+    marginLeft: 12,
+  },
+  convAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+  },
+  placeholderAvatar: {
+    backgroundColor: colors.surfaceDim,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  convCenter: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  convName: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 15,
+    color: colors.textPrimary,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  convMessage: {
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    marginTop: 2,
+  },
+  convMessageUnread: {
+    fontFamily: 'Cairo_600SemiBold',
+    color: colors.textPrimary,
+  },
+  convLeft: {
+    alignItems: 'flex-start',
+    gap: 6,
+    minWidth: 50,
+  },
+  convTime: {
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  unreadBadge: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    minWidth: 22,
+    height: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  unreadText: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 11,
+    color: '#fff',
+  },
+  separator: {
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    paddingBottom: 60,
+    paddingHorizontal: 40,
+  },
+  emptyTitle: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 17,
+    color: colors.textPrimary,
+    writingDirection: 'rtl',
+  },
+  emptySubtitle: {
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: 'center',
+    writingDirection: 'rtl',
   },
 });

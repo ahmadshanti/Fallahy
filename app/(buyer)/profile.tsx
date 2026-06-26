@@ -1,245 +1,217 @@
 import React, { useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Alert, Image as RNImage,
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  TextInput,
+  Image,
+  Alert,
+  ActivityIndicator,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
-import Avatar from '../../components/ui/Avatar';
-import Button from '../../components/ui/Button';
 import { colors } from '../../constants/colors';
-import { radius, spacing } from '../../constants/spacing';
 import { useAuthStore } from '../../store/authStore';
-import { useBuyerSavings } from '../../hooks/useSavings';
 import { supabase } from '../../lib/supabase';
-
-type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
-
-const menuItems: { label: string; icon: IoniconsName; route?: string }[] = [
-  { label: 'عناويني', icon: 'location-outline' },
-  { label: 'تنبيهات الأسعار', icon: 'notifications-outline', route: '/(buyer)/alerts' },
-  { label: 'الإعدادات', icon: 'settings-outline' },
-  { label: 'المساعدة', icon: 'help-circle-outline' },
-];
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, logout, updateUser } = useAuthStore();
-  const { data: savings } = useBuyerSavings(user?.id || '');
+  const { user, buyerId, logout, updateUser } = useAuthStore();
 
-  const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState(user?.name || '');
-  const [editCity, setEditCity] = useState(user?.city || '');
-  const [editAddress, setEditAddress] = useState(user?.address || '');
-  const [editPhone, setEditPhone] = useState(user?.phone || '');
-  const [newAvatar, setNewAvatar] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [fullName, setFullName] = useState(user?.full_name || '');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [city, setCity] = useState(user?.city || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!buyerId) return;
+    if (!fullName.trim()) {
+      Alert.alert('خطأ', 'الاسم مطلوب');
+      return;
+    }
+    try {
+      setSaving(true);
+      const updates: Record<string, any> = {
+        full_name: fullName.trim(),
+        phone: phone.trim(),
+        city: city.trim(),
+      };
+      const { error } = await supabase
+        .from('users')
+        .update(updates)
+        .eq('id', buyerId);
+      if (error) throw error;
+      updateUser(updates);
+      setEditing(false);
+      Alert.alert('تم الحفظ', 'تم تحديث الملف الشخصي');
+    } catch (err) {
+      console.error('Profile save error:', err);
+      Alert.alert('خطأ', 'تعذر حفظ التعديلات');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleLogout = () => {
-    Alert.alert('تسجيل الخروج', 'هل أنت متأكد؟', [
+    Alert.alert('تسجيل الخروج', 'هل أنت متأكد من تسجيل الخروج؟', [
       { text: 'إلغاء', style: 'cancel' },
-      { text: 'خروج', style: 'destructive', onPress: () => { logout(); router.replace('/(auth)/splash'); } },
+      {
+        text: 'تسجيل الخروج',
+        style: 'destructive',
+        onPress: async () => {
+          await logout();
+          router.replace('/');
+        },
+      },
     ]);
   };
 
-  const pickAvatar = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('تنبيه', 'يرجى السماح بالوصول للصور');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled) {
-      setNewAvatar(result.assets[0].uri);
-    }
-  };
+  const menuItems = [
+    {
+      icon: 'bag-outline' as const,
+      label: 'طلباتي',
+      onPress: () => router.push('/(buyer)/orders'),
+    },
+    {
+      icon: 'location-outline' as const,
+      label: 'عناويني',
+      onPress: () => Alert.alert('قريبا', 'هذه الخاصية قيد التطوير'),
+    },
+    {
+      icon: 'settings-outline' as const,
+      label: 'الإعدادات',
+      onPress: () => Alert.alert('قريبا', 'هذه الخاصية قيد التطوير'),
+    },
+    {
+      icon: 'help-circle-outline' as const,
+      label: 'المساعدة',
+      onPress: () => Alert.alert('قريبا', 'هذه الخاصية قيد التطوير'),
+    },
+  ];
 
-  const handleSave = async () => {
-    if (!user) return;
-    setIsSaving(true);
-    try {
-      let avatarUrl = user.avatar;
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>حسابي</Text>
+      </View>
 
-      if (newAvatar) {
-        const fileExt = newAvatar.split('.').pop()?.split('?')[0] || 'jpg';
-        const fileName = `${user.id}/avatar_${Date.now()}.${fileExt}`;
-        const formData = new FormData();
-        formData.append('file', { uri: newAvatar, name: `avatar.${fileExt}`, type: `image/${fileExt}` } as any);
-        const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, formData, { upsert: true });
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
-          avatarUrl = urlData.publicUrl;
-        }
-      }
-
-      const { error } = await supabase
-        .from('profiles')
-        .update({ name: editName, city: editCity, address: editAddress, phone: editPhone, avatar_url: avatarUrl })
-        .eq('id', user.id);
-
-      if (error) throw error;
-
-      updateUser({ name: editName, city: editCity, address: editAddress, phone: editPhone, avatar: avatarUrl });
-      setNewAvatar(null);
-      setIsEditing(false);
-      Alert.alert('', 'تم تحديث الملف الشخصي');
-    } catch {
-      Alert.alert('خطأ', 'فشل في حفظ التعديلات');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleMenuPress = (item: typeof menuItems[0]) => {
-    if (item.route) {
-      router.push(item.route as any);
-    } else if (item.label === 'عناويني') {
-      setIsEditing(true);
-    } else if (item.label === 'الإعدادات') {
-      setIsEditing(true);
-    } else if (item.label === 'المساعدة') {
-      router.push('/(buyer)/chat');
-    }
-  };
-
-  const displayAvatar = newAvatar || user?.avatar || '';
-  const totalSaved = savings?.totalSaved || 0;
-
-  if (isEditing) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.editHeader}>
-          <TouchableOpacity onPress={() => { setIsEditing(false); setNewAvatar(null); }}>
-            <Text style={styles.cancelText}>إلغاء</Text>
-          </TouchableOpacity>
-          <Text style={styles.editHeaderTitle}>تعديل الملف الشخصي</Text>
-          <View style={{ width: 50 }} />
-        </View>
-
-        <ScrollView contentContainerStyle={styles.editScroll} showsVerticalScrollIndicator={false}>
-          {/* Avatar Edit */}
-          <TouchableOpacity style={styles.editAvatarContainer} onPress={pickAvatar}>
-            {(newAvatar || displayAvatar) ? (
-              <RNImage source={{ uri: newAvatar || displayAvatar }} style={styles.editAvatarImage} />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Avatar + Info Card */}
+        <View style={styles.profileCard}>
+          <View style={styles.avatarWrapper}>
+            {user?.avatar_url ? (
+              <Image source={{ uri: user.avatar_url }} style={styles.avatar} />
             ) : (
-              <View style={styles.editAvatarPlaceholder}>
+              <View style={[styles.avatar, styles.placeholderAvatar]}>
                 <Ionicons name="person" size={40} color={colors.textMuted} />
               </View>
             )}
-            <View style={styles.editAvatarBadge}>
-              <Ionicons name="camera" size={14} color="#FFFFFF" />
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.editField}>
-            <Text style={styles.editLabel}>الاسم</Text>
-            <TextInput style={styles.editInput} value={editName} onChangeText={setEditName} textAlign="right" placeholder="الاسم" placeholderTextColor={colors.textMuted} />
           </View>
 
-          <View style={styles.editField}>
-            <Text style={styles.editLabel}>رقم الهاتف</Text>
-            <TextInput style={styles.editInput} value={editPhone} onChangeText={setEditPhone} textAlign="right" placeholder="رقم الهاتف" keyboardType="phone-pad" placeholderTextColor={colors.textMuted} />
-          </View>
-
-          <View style={styles.editField}>
-            <Text style={styles.editLabel}>المدينة</Text>
-            <TextInput style={styles.editInput} value={editCity} onChangeText={setEditCity} textAlign="right" placeholder="المدينة" placeholderTextColor={colors.textMuted} />
-          </View>
-
-          <View style={styles.editField}>
-            <Text style={styles.editLabel}>العنوان</Text>
-            <TextInput style={styles.editInput} value={editAddress} onChangeText={setEditAddress} textAlign="right" placeholder="الحي / الشارع" placeholderTextColor={colors.textMuted} />
-          </View>
-
-          <Button title="حفظ التعديلات" onPress={handleSave} fullWidth size="lg" loading={isSaving} />
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-        {/* Profile Card */}
-        <View style={styles.profileCard}>
-          <TouchableOpacity onPress={() => setIsEditing(true)}>
-            <View style={styles.avatarWrapper}>
-              <Avatar uri={displayAvatar} size={90} />
-              <View style={styles.avatarEditBadge}>
-                <Ionicons name="pencil" size={12} color="#FFFFFF" />
+          {editing ? (
+            <View style={styles.editForm}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>الاسم الكامل</Text>
+                <TextInput
+                  style={styles.input}
+                  value={fullName}
+                  onChangeText={setFullName}
+                  placeholder="الاسم الكامل"
+                  placeholderTextColor={colors.textMuted}
+                  textAlign="right"
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>رقم الهاتف</Text>
+                <TextInput
+                  style={styles.input}
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder="رقم الهاتف"
+                  placeholderTextColor={colors.textMuted}
+                  textAlign="right"
+                  keyboardType="phone-pad"
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>المدينة</Text>
+                <TextInput
+                  style={styles.input}
+                  value={city}
+                  onChangeText={setCity}
+                  placeholder="المدينة"
+                  placeholderTextColor={colors.textMuted}
+                  textAlign="right"
+                />
+              </View>
+              <View style={styles.editButtons}>
+                <TouchableOpacity
+                  style={styles.cancelBtn}
+                  onPress={() => {
+                    setEditing(false);
+                    setFullName(user?.full_name || '');
+                    setPhone(user?.phone || '');
+                    setCity(user?.city || '');
+                  }}
+                >
+                  <Text style={styles.cancelBtnText}>إلغاء</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+                  onPress={handleSave}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.saveBtnText}>حفظ</Text>
+                  )}
+                </TouchableOpacity>
               </View>
             </View>
-          </TouchableOpacity>
-
-          <Text style={styles.userName}>{user?.name || 'مستخدم'}</Text>
-          {user?.city && <Text style={styles.userCity}>{user.city}</Text>}
-          {user?.phone && (
-            <View style={styles.phoneRow}>
-              <Ionicons name="logo-whatsapp" size={16} color="#25D366" />
-              <Text style={styles.phoneText}>{user.phone}</Text>
+          ) : (
+            <View style={styles.profileInfo}>
+              <Text style={styles.profileName}>{user?.full_name || 'مستخدم'}</Text>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoText}>{user?.phone || 'لا يوجد رقم'}</Text>
+                <Ionicons name="call-outline" size={16} color={colors.textMuted} />
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoText}>{user?.city || 'لم تحدد'}</Text>
+                <Ionicons name="location-outline" size={16} color={colors.textMuted} />
+              </View>
+              <TouchableOpacity
+                style={styles.editProfileBtn}
+                onPress={() => setEditing(true)}
+              >
+                <Ionicons name="create-outline" size={16} color={colors.primary} />
+                <Text style={styles.editProfileText}>تعديل الملف الشخصي</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
 
-        {/* Savings Card */}
-        {totalSaved > 0 ? (
-          <View style={styles.savingsCard}>
-            <View style={styles.savingsRow}>
-              <View>
-                <Text style={styles.savingsLabel}>إجمالي التوفير</Text>
-                <Text style={styles.savingsAmount}>{totalSaved} ₪</Text>
-              </View>
-              <View style={styles.savingsIcon}>
-                <Ionicons name="trending-down" size={24} color={colors.primary} />
-              </View>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.welcomeCard}>
-            <Ionicons name="leaf-outline" size={32} color={colors.primary} />
-            <Text style={styles.welcomeTitle}>ابدأ رحلتك</Text>
-            <Text style={styles.welcomeSubtitle}>اطلب من مزارعين محليين ووفّر أموالك</Text>
-            <Button title="تصفح المنتجات" onPress={() => router.push('/(buyer)/explore')} size="sm" style={{ marginTop: spacing.sm }} />
-          </View>
-        )}
-
-        {/* Stats */}
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{savings?.totalOrders || 0}</Text>
-            <Text style={styles.statLabel}>طلبات</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{savings?.points || 0}</Text>
-            <Text style={styles.statLabel}>نقاط</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{savings?.rank || 'عضو جديد'}</Text>
-            <Text style={styles.statLabel}>الرتبة</Text>
-          </View>
-        </View>
-
-        {/* Menu */}
-        <View style={styles.menuSection}>
+        {/* Menu Items */}
+        <View style={styles.menuCard}>
           {menuItems.map((item, index) => (
             <TouchableOpacity
               key={item.label}
-              style={[styles.menuItem, index === menuItems.length - 1 && { borderBottomWidth: 0 }]}
-              onPress={() => handleMenuPress(item)}
+              style={[
+                styles.menuItem,
+                index < menuItems.length - 1 && styles.menuItemBorder,
+              ]}
+              onPress={item.onPress}
             >
               <Ionicons name="chevron-back" size={20} color={colors.textMuted} />
-              <View style={styles.menuContent}>
-                <Text style={styles.menuLabel}>{item.label}</Text>
-                <View style={styles.menuIconCircle}>
+              <View style={styles.menuItemRight}>
+                <Text style={styles.menuItemLabel}>{item.label}</Text>
+                <View style={styles.menuIconWrapper}>
                   <Ionicons name={item.icon} size={20} color={colors.primary} />
                 </View>
               </View>
@@ -252,133 +224,212 @@ export default function ProfileScreen() {
           <Ionicons name="log-out-outline" size={20} color={colors.error} />
           <Text style={styles.logoutText}>تسجيل الخروج</Text>
         </TouchableOpacity>
+
+        <View style={{ height: 30 }} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-
-  // Edit Mode
-  editHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
-  editHeaderTitle: { fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textPrimary },
-  cancelText: { fontFamily: 'Cairo_600SemiBold', fontSize: 15, color: colors.error },
-  editScroll: { padding: spacing.lg },
-  editAvatarContainer: {
-    alignSelf: 'center', marginBottom: spacing.lg, position: 'relative',
+  header: {
+    paddingTop: 50,
+    paddingBottom: 8,
+    paddingHorizontal: 16,
+    backgroundColor: colors.background,
   },
-  editAvatarImage: { width: 100, height: 100, borderRadius: 50 },
-  editAvatarPlaceholder: {
-    width: 100, height: 100, borderRadius: 50,
-    backgroundColor: '#E8E3D8', alignItems: 'center', justifyContent: 'center',
+  headerTitle: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 22,
+    color: colors.textPrimary,
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
-  editAvatarBadge: {
-    position: 'absolute', bottom: 0, right: 0,
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: colors.background,
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
   },
-  editField: { marginBottom: spacing.md },
-  editLabel: {
-    fontFamily: 'Cairo_600SemiBold', fontSize: 13, color: colors.textMuted,
-    textAlign: 'right', marginBottom: spacing.xs,
-  },
-  editInput: {
-    fontFamily: 'Cairo_400Regular', fontSize: 16, color: colors.textPrimary,
-    backgroundColor: colors.surface, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border, height: 50,
-    paddingHorizontal: spacing.md, writingDirection: 'rtl',
-  },
-
-  // Profile View
   profileCard: {
-    alignItems: 'center', paddingVertical: spacing.lg,
-    marginHorizontal: spacing.md, marginTop: spacing.sm,
-    backgroundColor: colors.surface, borderRadius: radius.xl,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
   },
-  avatarWrapper: { position: 'relative', marginBottom: spacing.sm },
-  avatarEditBadge: {
-    position: 'absolute', bottom: 2, right: 2,
-    width: 26, height: 26, borderRadius: 13,
-    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: colors.surface,
+  avatarWrapper: {
+    marginBottom: 16,
   },
-  userName: {
-    fontFamily: 'Cairo_700Bold', fontSize: 22, color: colors.textPrimary,
+  avatar: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
   },
-  userCity: {
-    fontFamily: 'Cairo_400Regular', fontSize: 14, color: colors.textMuted, marginTop: 2,
-  },
-  phoneRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6,
-  },
-  phoneText: {
-    fontFamily: 'Cairo_400Regular', fontSize: 13, color: colors.textMuted,
-  },
-
-  // Savings
-  savingsCard: {
-    marginHorizontal: spacing.md, marginTop: spacing.md,
-    backgroundColor: colors.primary, borderRadius: radius.xl, padding: spacing.lg,
-  },
-  savingsRow: {
-    flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center',
-  },
-  savingsIcon: {
-    width: 48, height: 48, borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center',
-  },
-  savingsLabel: { fontFamily: 'Cairo_400Regular', fontSize: 13, color: 'rgba(255,255,255,0.7)', textAlign: 'right' },
-  savingsAmount: { fontFamily: 'Cairo_700Bold', fontSize: 32, color: '#FFFFFF' },
-
-  // Welcome
-  welcomeCard: {
-    marginHorizontal: spacing.md, marginTop: spacing.md,
-    backgroundColor: colors.surface, borderRadius: radius.xl, padding: spacing.lg,
+  placeholderAvatar: {
+    backgroundColor: colors.surfaceDim,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  welcomeTitle: { fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textPrimary, marginTop: spacing.sm },
-  welcomeSubtitle: { fontFamily: 'Cairo_400Regular', fontSize: 14, color: colors.textMuted, marginTop: 4 },
-
-  // Stats
-  statsRow: {
-    flexDirection: 'row', marginHorizontal: spacing.md, marginTop: spacing.md,
-    backgroundColor: colors.surface, borderRadius: radius.xl, padding: spacing.md,
+  profileInfo: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 6,
   },
-  statItem: { flex: 1, alignItems: 'center' },
-  statValue: { fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textPrimary },
-  statLabel: { fontFamily: 'Cairo_400Regular', fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  statDivider: { width: 1, height: 30, backgroundColor: colors.border, alignSelf: 'center' },
-
-  // Menu
-  menuSection: {
-    marginHorizontal: spacing.md, marginTop: spacing.md,
-    backgroundColor: colors.surface, borderRadius: radius.xl, overflow: 'hidden',
+  profileName: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 20,
+    color: colors.textPrimary,
+    writingDirection: 'rtl',
+    marginBottom: 4,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  infoText: {
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 14,
+    color: colors.textSecondary,
+    writingDirection: 'rtl',
+  },
+  editProfileBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+  },
+  editProfileText: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 13,
+    color: colors.primary,
+  },
+  editForm: {
+    width: '100%',
+    gap: 12,
+  },
+  inputGroup: {
+    gap: 4,
+  },
+  inputLabel: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  input: {
+    backgroundColor: colors.surfaceDim,
+    borderRadius: 10,
+    padding: 12,
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 14,
+    color: colors.textPrimary,
+    writingDirection: 'rtl',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  editButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  cancelBtnText: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  saveBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+  },
+  saveBtnDisabled: {
+    opacity: 0.6,
+  },
+  saveBtnText: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 14,
+    color: '#fff',
+  },
+  menuCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
   },
   menuItem: {
-    flexDirection: 'row', alignItems: 'center', padding: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
-  menuContent: {
-    flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: spacing.sm,
+  menuItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
-  menuIconCircle: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: '#E8F5E1', alignItems: 'center', justifyContent: 'center',
+  menuItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  menuLabel: { fontFamily: 'Cairo_600SemiBold', fontSize: 15, color: colors.textPrimary },
-
-  // Logout
+  menuIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: colors.primary + '10',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuItemLabel: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 15,
+    color: colors.textPrimary,
+    writingDirection: 'rtl',
+  },
   logoutBtn: {
-    flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center',
-    gap: spacing.sm, marginHorizontal: spacing.md, marginTop: spacing.lg,
-    paddingVertical: 14, borderRadius: radius.xl,
-    borderWidth: 1, borderColor: colors.error,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.error + '10',
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.error + '30',
   },
-  logoutText: { fontFamily: 'Cairo_600SemiBold', fontSize: 15, color: colors.error },
+  logoutText: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 15,
+    color: colors.error,
+  },
 });

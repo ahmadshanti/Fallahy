@@ -9,14 +9,23 @@ type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 const buyerTabs: { name: string; title: string; icon: IoniconsName; iconFocused: IoniconsName }[] = [
   { name: 'index', title: 'الرئيسية', icon: 'home-outline', iconFocused: 'home' },
   { name: 'explore', title: 'تصفح', icon: 'search-outline', iconFocused: 'search' },
-  { name: 'orders', title: 'طلباتي', icon: 'bag-outline', iconFocused: 'bag' },
-  { name: 'chat', title: 'الدردشة', icon: 'chatbubble-outline', iconFocused: 'chatbubble' },
+  { name: 'trees', title: 'أشجاري', icon: 'leaf-outline', iconFocused: 'leaf' },
+  { name: 'chat', title: 'دردشاتي', icon: 'chatbubble-outline', iconFocused: 'chatbubble' },
   { name: 'profile', title: 'حسابي', icon: 'person-outline', iconFocused: 'person' },
 ];
 
 const hiddenScreens = [
-  'product/[id]', 'farmer/[id]', 'cart', 'checkout',
-  'order-tracking/[id]', 'map', 'alerts', 'adopt-tree', 'pick-your-own',
+  'product/[id]',
+  'farmer/[id]',
+  'cart',
+  'checkout',
+  'order-tracking/[id]',
+  'orders',
+  'map',
+  'pick-your-own',
+  'chat-thread/[id]',
+  'adopt-tree',
+  'alerts',
 ];
 
 export default function BuyerLayout() {

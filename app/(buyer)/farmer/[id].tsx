@@ -1,32 +1,83 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  ActivityIndicator,
+  Linking,
+  FlatList,
+  StatusBar,
+  Alert,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import Avatar from '../../../components/ui/Avatar';
-import Badge from '../../../components/ui/Badge';
-import RatingStars from '../../../components/ui/RatingStars';
-import Button from '../../../components/ui/Button';
-import ProductCard from '../../../components/buyer/ProductCard';
 import { colors } from '../../../constants/colors';
-import { radius, spacing } from '../../../constants/spacing';
-import { useFarmer } from '../../../hooks/useFarmers';
-import { useFarmerProducts } from '../../../hooks/useProducts';
-
-const { width } = Dimensions.get('window');
+import { getFarmerById } from '../../../lib/farmers';
+import { getProductsByFarmer } from '../../../lib/products';
+import { getTreesByFarmer } from '../../../lib/trees';
+import { getOrCreateConversation } from '../../../lib/chat';
+import { useAuthStore } from '../../../store/authStore';
+import { useCartStore } from '../../../store/cartStore';
+import { Farmer, Product, Tree } from '../../../types';
 
 export default function FarmerProfileScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data: farmer, isLoading: farmerLoading } = useFarmer(id as string);
-  const { data: farmerProducts = [] } = useFarmerProducts(id as string);
-  const [showFullStory, setShowFullStory] = useState(false);
+  const { buyerId } = useAuthStore();
+  const addItem = useCartStore((s) => s.addItem);
 
-  if (farmerLoading) {
+  const [farmer, setFarmer] = useState<Farmer | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [trees, setTrees] = useState<Tree[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (id) loadFarmer();
+  }, [id]);
+
+  const loadFarmer = async () => {
+    try {
+      setLoading(true);
+      const [farmerData, farmerProducts, farmerTrees] = await Promise.all([
+        getFarmerById(id!),
+        getProductsByFarmer(id!),
+        getTreesByFarmer(id!),
+      ]);
+      setFarmer(farmerData);
+      setProducts(farmerProducts);
+      setTrees(farmerTrees);
+    } catch (err) {
+      console.error('Farmer load error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChat = async () => {
+    if (!buyerId || !farmer) return;
+    try {
+      const conv = await getOrCreateConversation(buyerId, farmer.id);
+      router.push(`/(buyer)/chat-thread/${conv.id}`);
+    } catch (err) {
+      Alert.alert('خطأ', 'تعذر بدء المحادثة');
+    }
+  };
+
+  const handleWhatsApp = () => {
+    if (!farmer?.whatsapp_number) {
+      Alert.alert('غير متوفر', 'لا يوجد رقم واتساب لهذا المزارع');
+      return;
+    }
+    const num = farmer.whatsapp_number.replace(/\D/g, '');
+    Linking.openURL(`https://wa.me/${num}`);
+  };
+
+  if (loading) {
     return (
-      <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+      <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
@@ -34,180 +85,433 @@ export default function FarmerProfileScreen() {
 
   if (!farmer) {
     return (
-      <SafeAreaView style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
-        <Ionicons name="alert-circle-outline" size={60} color={colors.textMuted} />
-        <Text style={{ fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textMuted, marginTop: spacing.md }}>المزارع غير موجود</Text>
-        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: spacing.md }}>
-          <Text style={{ fontFamily: 'Cairo_600SemiBold', fontSize: 16, color: colors.primary }}>العودة</Text>
+      <View style={styles.loadingContainer}>
+        <Ionicons name="alert-circle-outline" size={48} color={colors.textMuted} />
+        <Text style={styles.emptyText}>المزرعة غير موجودة</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.goBackBtn}>
+          <Text style={styles.goBackText}>رجوع</Text>
         </TouchableOpacity>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Hero */}
-        <View style={styles.hero}>
-          <Image
-            source={{ uri: farmer?.avatar || '' }}
-            style={styles.coverImage}
-            contentFit="cover"
-          />
-          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.7)']} style={StyleSheet.absoluteFillObject} />
-          <SafeAreaView style={styles.heroOverlay}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-              <Ionicons name="arrow-forward" size={18} color={colors.textPrimary} />
-            </TouchableOpacity>
-          </SafeAreaView>
-          <View style={styles.heroBottom}>
-            <Text style={styles.farmerName}>{farmer.name}</Text>
-            {farmer.isVerified && <Badge label="موثّق ✓" variant="verified" />}
-          </View>
-        </View>
-
-        {/* Avatar */}
-        <View style={styles.avatarContainer}>
-          <Avatar uri={farmer.avatar} size={80} style={styles.avatar} />
-        </View>
-
-        {/* Stats */}
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{farmer.totalProducts}</Text>
-            <Text style={styles.statLabel}>منتج</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{farmer.rating}</Text>
-            <Text style={styles.statLabel}>التقييم</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{farmer.reviewCount}</Text>
-            <Text style={styles.statLabel}>تقييم</Text>
-          </View>
-        </View>
-
-        {/* Story */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>قصة المزرعة</Text>
-          <Text style={styles.storyText} numberOfLines={showFullStory ? undefined : 2}>
-            {farmer.story}
-          </Text>
-          <TouchableOpacity onPress={() => setShowFullStory(!showFullStory)}>
-            <Text style={styles.showMore}>{showFullStory ? 'عرض أقل' : 'عرض المزيد'}</Text>
+        {/* Farm Images Gallery */}
+        <View style={styles.galleryContainer}>
+          {farmer.farm_images && farmer.farm_images.length > 0 ? (
+            <FlatList
+              data={farmer.farm_images}
+              renderItem={({ item }) => (
+                <Image source={{ uri: item }} style={styles.galleryImage} />
+              )}
+              keyExtractor={(_, i) => i.toString()}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+            />
+          ) : farmer.owner_avatar_url ? (
+            <Image source={{ uri: farmer.owner_avatar_url }} style={styles.galleryImage} />
+          ) : (
+            <View style={[styles.galleryImage, styles.placeholderGallery]}>
+              <Ionicons name="image-outline" size={60} color={colors.textMuted} />
+            </View>
+          )}
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+            <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
         </View>
 
-        {/* Map Preview */}
-        <TouchableOpacity style={styles.mapPreview} onPress={() => router.push('/(buyer)/map')}>
-          <View style={styles.mapPlaceholder}>
-            <Ionicons name="map-outline" size={40} color={colors.primary} />
-            <Text style={styles.mapText}>المزرعة على الخريطة</Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* Specialties */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>التخصص</Text>
-          <View style={styles.chipsRow}>
-            {farmer.specialty?.map((s: string) => (
-              <Badge key={s} label={s} variant="organic" />
-            ))}
-          </View>
-        </View>
-
-        {/* Products */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>منتجاته</Text>
-          {farmerProducts.length === 0 ? (
-            <View style={{ alignItems: 'center', paddingVertical: spacing.lg }}>
-              <Text style={{ fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.textMuted }}>لا توجد منتجات حالياً</Text>
+        <View style={styles.content}>
+          {/* Farm Info */}
+          <View style={styles.farmHeader}>
+            <View style={styles.farmNameRow}>
+              <Text style={styles.farmName}>{farmer.farm_name}</Text>
+              {farmer.is_verified && (
+                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+              )}
             </View>
-          ) : (
-            <View style={styles.productsGrid}>
-              {farmerProducts.map((product) => (
-                <View key={product.id} style={styles.productItem}>
-                  <ProductCard
-                    product={product}
-                    onPress={() => router.push(`/(buyer)/product/${product.id}`)}
-                  />
-                </View>
-              ))}
+            <View style={styles.cityRow}>
+              <Text style={styles.cityText}>{farmer.city}</Text>
+              <Ionicons name="location" size={14} color={colors.secondary} />
+            </View>
+          </View>
+
+          {/* About */}
+          {farmer.about && (
+            <View style={styles.aboutSection}>
+              <Text style={styles.sectionTitle}>عن المزرعة</Text>
+              <Text style={styles.aboutText}>{farmer.about}</Text>
             </View>
           )}
+
+          {/* Contact Buttons */}
+          <View style={styles.contactRow}>
+            <TouchableOpacity style={styles.chatBtn} onPress={handleChat}>
+              <Ionicons name="chatbubble-outline" size={18} color="#fff" />
+              <Text style={styles.chatBtnText}>تواصل مباشر</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.whatsappBtn} onPress={handleWhatsApp}>
+              <Ionicons name="logo-whatsapp" size={18} color="#25D366" />
+              <Text style={styles.whatsappBtnText}>واتساب</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Products */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>منتجات المزرعة</Text>
+            {products.length === 0 ? (
+              <View style={styles.emptySection}>
+                <Ionicons name="basket-outline" size={32} color={colors.textMuted} />
+                <Text style={styles.emptySectionText}>لا توجد منتجات حاليا</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={products}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.productCard}
+                    onPress={() => router.push(`/(buyer)/product/${item.id}`)}
+                    activeOpacity={0.7}
+                  >
+                    {item.image_url ? (
+                      <Image source={{ uri: item.image_url }} style={styles.productImage} />
+                    ) : (
+                      <View style={[styles.productImage, styles.placeholderImg]}>
+                        <Ionicons name="image-outline" size={24} color={colors.textMuted} />
+                      </View>
+                    )}
+                    <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.productPrice}>
+                      {(item.retail_price || 0).toFixed(2)} د.أ
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.addCartMini}
+                      onPress={() => addItem(item, 1, 'retail')}
+                    >
+                      <Ionicons name="add" size={16} color="#fff" />
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                )}
+                keyExtractor={(item) => item.id}
+                horizontal
+                inverted
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalList}
+              />
+            )}
+          </View>
+
+          {/* Trees */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>أشجار للتبني</Text>
+            {trees.length === 0 ? (
+              <View style={styles.emptySection}>
+                <Ionicons name="leaf-outline" size={32} color={colors.textMuted} />
+                <Text style={styles.emptySectionText}>لا توجد أشجار للتبني</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={trees}
+                renderItem={({ item }) => (
+                  <View style={styles.treeCard}>
+                    {item.image_url ? (
+                      <Image source={{ uri: item.image_url }} style={styles.treeImage} />
+                    ) : (
+                      <View style={[styles.treeImage, styles.placeholderImg]}>
+                        <Ionicons name="leaf" size={24} color={colors.textMuted} />
+                      </View>
+                    )}
+                    <Text style={styles.treeName}>{item.tree_type}</Text>
+                    <Text style={styles.treePrice}>{item.annual_price} د.أ/سنة</Text>
+                    <TouchableOpacity
+                      style={styles.adoptMiniBtn}
+                      onPress={() => router.push('/(buyer)/trees')}
+                    >
+                      <Text style={styles.adoptMiniBtnText}>تبنّى</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                keyExtractor={(item) => item.id}
+                horizontal
+                inverted
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalList}
+              />
+            )}
+          </View>
+
+          <View style={{ height: 30 }} />
         </View>
       </ScrollView>
-
-      {/* Bottom CTA */}
-      <View style={styles.bottomBar}>
-        <Button title="تواصل مباشر" onPress={() => {}} size="md" style={{ flex: 1, backgroundColor: '#25D366' }} />
-        <Button title="متابعة المزرعة" onPress={() => {}} variant="outlined" size="md" style={{ flex: 1 }} />
-      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  hero: { height: 280, position: 'relative' },
-  coverImage: { width: '100%', height: '100%' },
-  heroOverlay: { position: 'absolute', top: 0, left: 0, right: 0 },
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    gap: 12,
+  },
+  emptyText: {
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 16,
+    color: colors.textMuted,
+    writingDirection: 'rtl',
+  },
+  goBackBtn: {
+    marginTop: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+  },
+  goBackText: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 14,
+    color: '#fff',
+  },
+  galleryContainer: {
+    position: 'relative',
+    height: 260,
+  },
+  galleryImage: {
+    width: 400,
+    height: 260,
+    resizeMode: 'cover',
+  },
+  placeholderGallery: {
+    width: '100%',
+    backgroundColor: colors.surfaceDim,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   backBtn: {
-    width: 36, height: 36, borderRadius: 18,
+    position: 'absolute',
+    top: 50,
+    right: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.9)',
-    alignItems: 'center', justifyContent: 'center',
-    margin: spacing.md,
-    alignSelf: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  backArrow: { fontSize: 18 },
-  heroBottom: {
-    position: 'absolute', bottom: 20, left: spacing.md, right: spacing.md,
-    flexDirection: 'row-reverse', alignItems: 'center', gap: spacing.sm,
+  content: {
+    paddingHorizontal: 16,
+    marginTop: -20,
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 20,
   },
-  farmerName: {
-    fontFamily: 'Cairo_700Bold', fontSize: 22, color: '#FFFFFF',
-    textAlign: 'right', writingDirection: 'rtl',
+  farmHeader: {
+    marginBottom: 16,
+    alignItems: 'flex-end',
   },
-  avatarContainer: { alignItems: 'center', marginTop: -40, zIndex: 10 },
-  avatar: { borderWidth: 3, borderColor: '#FFFFFF' },
-  statsRow: {
-    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-    paddingVertical: spacing.md, marginHorizontal: spacing.lg,
+  farmNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  stat: { flex: 1, alignItems: 'center' },
-  statValue: { fontFamily: 'Cairo_700Bold', fontSize: 20, color: colors.textPrimary },
-  statLabel: { fontFamily: 'Cairo_400Regular', fontSize: 13, color: colors.textMuted },
-  statDivider: { width: 1, height: 30, backgroundColor: colors.border },
-  section: { paddingHorizontal: spacing.md, marginTop: spacing.md },
+  farmName: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 24,
+    color: colors.textPrimary,
+    writingDirection: 'rtl',
+  },
+  cityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  cityText: {
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 14,
+    color: colors.textSecondary,
+    writingDirection: 'rtl',
+  },
+  aboutSection: {
+    marginBottom: 16,
+  },
   sectionTitle: {
-    fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textPrimary,
-    textAlign: 'right', writingDirection: 'rtl', marginBottom: spacing.sm,
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 18,
+    color: colors.textPrimary,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    marginBottom: 8,
   },
-  storyText: {
-    fontFamily: 'Cairo_400Regular', fontSize: 15, color: colors.textSecondary,
-    textAlign: 'right', writingDirection: 'rtl', lineHeight: 24,
+  aboutText: {
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    lineHeight: 22,
   },
-  showMore: {
-    fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.primary,
-    textAlign: 'right', marginTop: 4,
+  contactRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
   },
-  mapPreview: {
-    marginHorizontal: spacing.md, marginTop: spacing.md,
-    height: 150, borderRadius: radius.lg, overflow: 'hidden',
+  chatBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    borderRadius: 12,
   },
-  mapPlaceholder: {
-    flex: 1, backgroundColor: colors.surfaceDim,
-    alignItems: 'center', justifyContent: 'center',
+  chatBtnText: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 14,
+    color: '#fff',
   },
-  mapIcon: { fontSize: 40 },
-  mapText: { fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.primary, marginTop: 8 },
-  chipsRow: { flexDirection: 'row-reverse', gap: spacing.sm, flexWrap: 'wrap' },
-  productsGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: spacing.sm },
-  productItem: { width: (width - spacing.md * 3) / 2 },
-  bottomBar: {
-    flexDirection: 'row-reverse', padding: spacing.md, paddingBottom: 30, gap: spacing.sm,
-    backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border,
+  whatsappBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#25D366' + '15',
+    borderWidth: 1.5,
+    borderColor: '#25D366',
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  whatsappBtnText: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 14,
+    color: '#25D366',
+  },
+  section: {
+    marginBottom: 20,
+  },
+  emptySection: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    gap: 8,
+  },
+  emptySectionText: {
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 13,
+    color: colors.textMuted,
+    writingDirection: 'rtl',
+  },
+  horizontalList: {
+    gap: 12,
+    paddingHorizontal: 4,
+  },
+  productCard: {
+    width: 140,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    position: 'relative',
+  },
+  productImage: {
+    width: '100%',
+    height: 100,
+    resizeMode: 'cover',
+  },
+  placeholderImg: {
+    backgroundColor: colors.surfaceDim,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  productName: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 12,
+    color: colors.textPrimary,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    paddingHorizontal: 8,
+    marginTop: 6,
+  },
+  productPrice: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 13,
+    color: colors.primary,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+    marginTop: 2,
+  },
+  addCartMini: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  treeCard: {
+    width: 150,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+  },
+  treeImage: {
+    width: '100%',
+    height: 100,
+    resizeMode: 'cover',
+  },
+  treeName: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 12,
+    color: colors.textPrimary,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    paddingHorizontal: 8,
+    marginTop: 6,
+  },
+  treePrice: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 12,
+    color: colors.secondary,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    paddingHorizontal: 8,
+    marginTop: 2,
+  },
+  adoptMiniBtn: {
+    backgroundColor: colors.secondary + '20',
+    marginHorizontal: 8,
+    marginVertical: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  adoptMiniBtnText: {
+    fontFamily: 'Cairo_600SemiBold',
+    fontSize: 12,
+    color: colors.secondary,
   },
 });
