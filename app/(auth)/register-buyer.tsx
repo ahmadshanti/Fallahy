@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import {
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  Alert, Image, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
@@ -9,52 +14,114 @@ import { supabase } from '../../lib/supabase';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 
-const cities = ['رام الله', 'نابلس', 'الخليل', 'جنين', 'بيت لحم', 'طولكرم', 'قلقيلية'];
+const countries = [
+  { name: 'فلسطين', code: '+970', flag: '🇵🇸', cities: ['رام الله', 'نابلس', 'الخليل', 'جنين', 'بيت لحم', 'طولكرم', 'قلقيلية', 'غزة', 'خان يونس', 'سلفيت', 'أريحا', 'طوباس'] },
+  { name: 'الأردن', code: '+962', flag: '🇯🇴', cities: ['عمّان', 'إربد', 'الزرقاء', 'العقبة', 'المفرق', 'جرش', 'عجلون', 'الكرك', 'مادبا', 'السلط'] },
+];
 
 export default function RegisterBuyerScreen() {
   const router = useRouter();
-  const { user, login } = useAuthStore();
+  const login = useAuthStore((s) => s.login);
+  const [step, setStep] = useState(1);
+  const [avatar, setAvatar] = useState<string | null>(null);
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState(countries[0]);
   const [city, setCity] = useState('');
-  const [address, setAddress] = useState('');
-  const [purchaseType, setPurchaseType] = useState<'retail' | 'wholesale'>('retail');
-  const [familyAccount, setFamilyAccount] = useState(false);
+  const [neighborhood, setNeighborhood] = useState('');
+  const [showCountries, setShowCountries] = useState(false);
   const [showCities, setShowCities] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleRegister = async () => {
-    if (!name || !city) return;
-    setLoading(true);
+  const pickImage = async (fromCamera: boolean) => {
     try {
-      let userId = user?.id;
-
-      // If no user ID, create anonymous account
-      if (!userId || userId === 'dev-test-user') {
-        const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
-        if (anonError) {
-          Alert.alert('خطأ', anonError.message);
-          setLoading(false);
+      if (fromCamera) {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('تنبيه', 'يرجى السماح بالوصول للكاميرا من إعدادات الجهاز');
           return;
         }
-        userId = anonData.user?.id;
-        if (!userId) {
-          Alert.alert('خطأ', 'فشل إنشاء الحساب');
-          setLoading(false);
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('تنبيه', 'يرجى السماح بالوصول للصور من إعدادات الجهاز');
           return;
         }
       }
+      const options: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      };
+      const result = fromCamera
+        ? await ImagePicker.launchCameraAsync(options)
+        : await ImagePicker.launchImageLibraryAsync(options);
+      if (!result.canceled) {
+        setAvatar(result.assets[0].uri);
+      }
+    } catch (err) {
+      Alert.alert('خطأ', 'فشل فتح الكاميرا أو المعرض');
+    }
+  };
 
-      // Update profile
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({
-          id: userId,
-          name,
-          city,
-          address,
-          role: 'buyer',
-          phone: user?.phone || '',
-        });
+  const showImageOptions = () => {
+    Alert.alert('صورة الملف الشخصي', 'اختر طريقة إضافة الصورة', [
+      { text: 'التقاط صورة', onPress: () => pickImage(true) },
+      { text: 'اختيار من المعرض', onPress: () => pickImage(false) },
+      { text: 'إلغاء', style: 'cancel' },
+    ]);
+  };
+
+  const handleRegister = async () => {
+    if (!name || !phone || !city) {
+      Alert.alert('تنبيه', 'يرجى ملء جميع الحقول المطلوبة');
+      return;
+    }
+    setLoading(true);
+    try {
+      const fullPhone = `${selectedCountry.code}${phone}`;
+      const email = `${phone.replace(/\D/g, '')}_${Date.now()}@example.com`;
+
+      const { data: signUpData, error: signUpError } = await supabase.auth.signInAnonymously();
+      if (signUpError) {
+        Alert.alert('خطأ', signUpError.message);
+        setLoading(false);
+        return;
+      }
+
+      const userId = signUpData.user?.id;
+      if (!userId) {
+        Alert.alert('خطأ', 'فشل إنشاء الحساب');
+        setLoading(false);
+        return;
+      }
+
+      let avatarUrl = null;
+      if (avatar) {
+        try {
+          const fileExt = avatar.split('.').pop() || 'jpg';
+          const fileName = `${userId}/avatar.${fileExt}`;
+          const response = await fetch(avatar);
+          const blob = await response.blob();
+          await supabase.storage.from('avatars').upload(fileName, blob, { contentType: `image/${fileExt}`, upsert: true });
+          const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
+          avatarUrl = urlData.publicUrl;
+        } catch (e) {
+          // Avatar upload failed, continue without it
+        }
+      }
+
+      const address = neighborhood ? `${city}، ${neighborhood}` : city;
+      const { error } = await supabase.from('profiles').upsert({
+        id: userId,
+        name,
+        phone: fullPhone,
+        city,
+        address,
+        role: 'buyer',
+        avatar_url: avatarUrl,
+      });
 
       if (error) {
         Alert.alert('خطأ', error.message);
@@ -63,133 +130,265 @@ export default function RegisterBuyerScreen() {
       }
 
       login(
-        { id: userId, name, phone: user?.phone || '', role: 'buyer', city, address },
+        { id: userId, name, phone: fullPhone, role: 'buyer', city, address, avatar: avatarUrl || undefined },
         'buyer'
       );
       router.replace('/(buyer)');
     } catch (err: any) {
-      Alert.alert('خطأ', err?.message || 'حدث خطأ في التسجيل');
+      Alert.alert('خطأ', err?.message || 'حدث خطأ');
     } finally {
       setLoading(false);
     }
   };
 
+  const canProceed = () => {
+    if (step === 1) return true; // photo is optional
+    if (step === 2) return name.length > 0;
+    if (step === 3) return phone.length >= 9;
+    if (step === 4) return city.length > 0;
+    return false;
+  };
+
+  const nextStep = () => {
+    if (step < 4) setStep(step + 1);
+    else handleRegister();
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>تسجيل حساب مستهلك</Text>
-
-        <Input label="الاسم الكامل" value={name} onChangeText={setName} placeholder="أدخل اسمك" />
-
-        <View style={styles.fieldWrapper}>
-          <Text style={styles.label}>المدينة</Text>
-          <TouchableOpacity style={styles.dropdown} onPress={() => setShowCities(!showCities)}>
-            <Text style={[styles.dropdownText, !city && styles.placeholder]}>
-              {city || 'اختر المدينة'}
-            </Text>
-            <Text style={styles.chevron}>▼</Text>
-          </TouchableOpacity>
-          {showCities && (
-            <View style={styles.cityList}>
-              {cities.map((c) => (
-                <TouchableOpacity
-                  key={c}
-                  style={styles.cityItem}
-                  onPress={() => { setCity(c); setShowCities(false); }}
-                >
-                  <Text style={styles.cityText}>{c}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
-
-        <Input label="العنوان" value={address} onChangeText={setAddress} placeholder="أدخل عنوانك" />
-
-        <View style={styles.fieldWrapper}>
-          <Text style={styles.label}>نوع الشراء</Text>
-          <View style={styles.toggleRow}>
-            <TouchableOpacity
-              style={[styles.toggleBtn, purchaseType === 'retail' && styles.toggleActive]}
-              onPress={() => setPurchaseType('retail')}
-            >
-              <Text style={[styles.toggleText, purchaseType === 'retail' && styles.toggleTextActive]}>مفرق</Text>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => step > 1 ? setStep(step - 1) : router.back()}>
+              <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.toggleBtn, purchaseType === 'wholesale' && styles.toggleActive]}
-              onPress={() => setPurchaseType('wholesale')}
-            >
-              <Text style={[styles.toggleText, purchaseType === 'wholesale' && styles.toggleTextActive]}>جملة</Text>
-            </TouchableOpacity>
+            <Text style={styles.headerTitle}>إنشاء حساب</Text>
+            <View style={{ width: 24 }} />
           </View>
-        </View>
 
-        <View style={styles.switchRow}>
-          <TouchableOpacity
-            style={[styles.switch, familyAccount && styles.switchOn]}
-            onPress={() => setFamilyAccount(!familyAccount)}
-          >
-            <View style={[styles.switchThumb, familyAccount && styles.switchThumbOn]} />
-          </TouchableOpacity>
-          <Text style={styles.switchLabel}>ربط حساب عائلي</Text>
-        </View>
+          {/* Progress */}
+          <View style={styles.progressRow}>
+            {[1, 2, 3, 4].map((s) => (
+              <View key={s} style={[styles.progressDot, s <= step && styles.progressDotActive]} />
+            ))}
+          </View>
 
-        <Button
-          title="إنشاء حسابي"
-          onPress={handleRegister}
-          fullWidth
-          size="lg"
-          disabled={!name || !city}
-          loading={loading}
-        />
-      </ScrollView>
+          <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            {/* Step 1: Photo */}
+            {step === 1 && (
+              <View style={styles.stepContainer}>
+                <Text style={styles.stepTitle}>صورتك الشخصية</Text>
+                <Text style={styles.stepSubtitle}>اختياري — يمكنك إضافتها لاحقاً</Text>
+                <TouchableOpacity style={styles.avatarPicker} onPress={showImageOptions}>
+                  {avatar ? (
+                    <Image source={{ uri: avatar }} style={styles.avatarImage} />
+                  ) : (
+                    <View style={styles.avatarPlaceholder}>
+                      <Ionicons name="camera-outline" size={40} color={colors.textMuted} />
+                      <Text style={styles.avatarText}>إضافة صورة</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Step 2: Name */}
+            {step === 2 && (
+              <View style={styles.stepContainer}>
+                <Text style={styles.stepTitle}>ما اسمك؟</Text>
+                <Text style={styles.stepSubtitle}>الاسم اللي بيظهر للمزارعين</Text>
+                <View style={styles.fullWidth}>
+                  <Input
+                    value={name}
+                    onChangeText={setName}
+                    placeholder="أدخل اسمك الكامل"
+                    autoFocus
+                  />
+                </View>
+              </View>
+            )}
+
+            {/* Step 3: Phone */}
+            {step === 3 && (
+              <View style={styles.stepContainer}>
+                <Text style={styles.stepTitle}>رقم الواتساب</Text>
+                <Text style={styles.stepSubtitle}>عشان المزارع يقدر يتواصل معك</Text>
+                <View style={[styles.phoneRow, styles.fullWidth]}>
+                  <View style={styles.phoneInput}>
+                    <Input
+                      value={phone}
+                      onChangeText={setPhone}
+                      placeholder="591234567"
+                      keyboardType="phone-pad"
+                      autoFocus
+                    />
+                  </View>
+                  <TouchableOpacity style={styles.countryBtn} onPress={() => setShowCountries(!showCountries)}>
+                    <Text style={styles.countryFlag}>{selectedCountry.flag}</Text>
+                    <Text style={styles.countryCode}>{selectedCountry.code}</Text>
+                    <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+                {showCountries && (
+                  <View style={styles.dropdownList}>
+                    {countries.map((c) => (
+                      <TouchableOpacity
+                        key={c.code}
+                        style={[styles.dropdownItem, selectedCountry.code === c.code && styles.dropdownItemActive]}
+                        onPress={() => { setSelectedCountry(c); setShowCountries(false); setCity(''); }}
+                      >
+                        <Text style={styles.dropdownCode}>{c.code}</Text>
+                        <Text style={styles.dropdownName}>{c.flag} {c.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Step 4: Location */}
+            {step === 4 && (
+              <View style={styles.stepContainer}>
+                <Text style={styles.stepTitle}>وين ساكن؟</Text>
+                <Text style={styles.stepSubtitle}>عشان نوصّلك المنتجات</Text>
+
+                <Text style={styles.fieldLabel}>المدينة</Text>
+                <TouchableOpacity style={styles.dropdown} onPress={() => setShowCities(!showCities)}>
+                  <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
+                  <Text style={[styles.dropdownText, !city && styles.placeholder]}>
+                    {city || 'اختر المدينة'}
+                  </Text>
+                </TouchableOpacity>
+                {showCities && (
+                  <View style={styles.dropdownList}>
+                    <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled>
+                      {selectedCountry.cities.map((c) => (
+                        <TouchableOpacity
+                          key={c}
+                          style={[styles.dropdownItem, city === c && styles.dropdownItemActive]}
+                          onPress={() => { setCity(c); setShowCities(false); }}
+                        >
+                          <Text style={styles.dropdownName}>{c}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+
+                <View style={{ height: spacing.md }} />
+                <Text style={styles.fieldLabel}>الحي / الشارع (اختياري)</Text>
+                <View style={styles.fullWidth}>
+                  <Input
+                    value={neighborhood}
+                    onChangeText={setNeighborhood}
+                    placeholder="مثال: حي الطيرة، شارع الرئيسي"
+                  />
+                </View>
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Bottom Button */}
+          <View style={styles.bottom}>
+            <Button
+              title={step === 4 ? 'إنشاء حسابي' : 'التالي'}
+              onPress={nextStep}
+              fullWidth
+              size="lg"
+              disabled={step > 1 && !canProceed()}
+              loading={loading}
+            />
+            {step === 1 && (
+              <TouchableOpacity onPress={() => setStep(2)} style={styles.skipBtn}>
+                <Text style={styles.skipText}>تخطي</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </TouchableWithoutFeedback>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  scroll: { padding: spacing.lg, paddingBottom: 40 },
-  title: {
-    fontFamily: 'Cairo_700Bold', fontSize: 24, color: colors.textPrimary,
-    textAlign: 'center', marginBottom: spacing.xl, writingDirection: 'rtl',
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
   },
-  fieldWrapper: { marginBottom: spacing.md },
-  label: {
+  headerTitle: { fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textPrimary },
+  progressRow: {
+    flexDirection: 'row', justifyContent: 'center', gap: 8,
+    paddingVertical: spacing.sm,
+  },
+  progressDot: {
+    width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border,
+  },
+  progressDotActive: { backgroundColor: colors.primary },
+  scroll: { flexGrow: 1, padding: spacing.lg },
+  fullWidth: { width: '100%' },
+  stepContainer: { alignItems: 'center', paddingTop: spacing.xl },
+  stepTitle: {
+    fontFamily: 'Cairo_700Bold', fontSize: 24, color: colors.textPrimary,
+    textAlign: 'center', marginBottom: spacing.xs,
+  },
+  stepSubtitle: {
+    fontFamily: 'Cairo_400Regular', fontSize: 15, color: colors.textMuted,
+    textAlign: 'center', marginBottom: spacing.xl,
+  },
+  avatarPicker: {
+    width: 140, height: 140, borderRadius: 70, overflow: 'hidden',
+    backgroundColor: colors.surfaceDim, borderWidth: 2, borderColor: colors.border,
+    borderStyle: 'dashed',
+  },
+  avatarImage: { width: '100%', height: '100%' },
+  avatarPlaceholder: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+  },
+  avatarText: {
+    fontFamily: 'Cairo_600SemiBold', fontSize: 13, color: colors.textMuted, marginTop: 4,
+  },
+  phoneRow: {
+    flexDirection: 'row', gap: spacing.sm, width: '100%',
+  },
+  phoneInput: { flex: 1 },
+  countryBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: colors.surfaceDim, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.border,
+    paddingHorizontal: spacing.sm, height: 48, marginBottom: spacing.md,
+  },
+  countryFlag: { fontSize: 20 },
+  countryCode: { fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.textPrimary },
+  fieldLabel: {
     fontFamily: 'Cairo_600SemiBold', fontSize: 14, color: colors.textPrimary,
-    marginBottom: spacing.xs, textAlign: 'right', writingDirection: 'rtl',
+    textAlign: 'right', writingDirection: 'rtl', alignSelf: 'flex-end',
+    marginBottom: spacing.xs,
   },
   dropdown: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     backgroundColor: colors.surfaceDim, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border, height: 48, paddingHorizontal: spacing.md,
+    borderWidth: 1, borderColor: colors.border, height: 48,
+    paddingHorizontal: spacing.md, width: '100%',
   },
   dropdownText: { fontFamily: 'Cairo_400Regular', fontSize: 15, color: colors.textPrimary },
   placeholder: { color: colors.textMuted },
-  chevron: { fontSize: 12, color: colors.textMuted },
-  cityList: {
+  dropdownList: {
     backgroundColor: colors.surface, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border, marginTop: 4,
+    borderWidth: 1, borderColor: colors.border, marginTop: 4, width: '100%',
+    overflow: 'hidden',
   },
-  cityItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
-  cityText: { fontFamily: 'Cairo_400Regular', fontSize: 15, color: colors.textPrimary, textAlign: 'right' },
-  toggleRow: { flexDirection: 'row', gap: spacing.sm },
-  toggleBtn: {
-    flex: 1, height: 44, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center',
+  dropdownItem: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 14, borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  toggleActive: { backgroundColor: colors.primary },
-  toggleText: { fontFamily: 'Cairo_600SemiBold', fontSize: 15, color: colors.primary },
-  toggleTextActive: { color: '#FFFFFF' },
-  switchRow: {
-    flexDirection: 'row-reverse', alignItems: 'center', marginBottom: spacing.lg, gap: spacing.sm,
+  dropdownItemActive: { backgroundColor: '#F5F9F2' },
+  dropdownName: { fontFamily: 'Cairo_600SemiBold', fontSize: 15, color: colors.textPrimary },
+  dropdownCode: { fontFamily: 'Cairo_400Regular', fontSize: 14, color: colors.textMuted },
+  bottom: {
+    paddingHorizontal: spacing.lg, paddingBottom: spacing.lg,
   },
-  switchLabel: { fontFamily: 'Cairo_400Regular', fontSize: 15, color: colors.textPrimary },
-  switch: {
-    width: 50, height: 28, borderRadius: 14,
-    backgroundColor: colors.border, justifyContent: 'center', paddingHorizontal: 2,
-  },
-  switchOn: { backgroundColor: colors.primary },
-  switchThumb: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF' },
-  switchThumbOn: { alignSelf: 'flex-end' },
+  skipBtn: { alignItems: 'center', paddingVertical: spacing.sm },
+  skipText: { fontFamily: 'Cairo_600SemiBold', fontSize: 15, color: colors.textMuted },
 });

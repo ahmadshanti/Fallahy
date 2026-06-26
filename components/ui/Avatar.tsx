@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
+import { View, Image as RNImage, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { colors } from '../../constants/colors';
 
 interface AvatarProps {
   uri: string;
@@ -9,21 +10,29 @@ interface AvatarProps {
 }
 
 export default function Avatar({ uri, size = 50, style }: AvatarProps) {
+  const hasImage = uri && uri.length > 5;
+
   return (
-    <View style={[styles.container, { width: size, height: size, borderRadius: size / 2 }, style]}>
-      <Image
-        source={{ uri }}
-        style={{ width: size, height: size, borderRadius: size / 2 }}
-        placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
-        contentFit="cover"
-        transition={200}
-      />
+    <View style={[{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden' }, style]}>
+      {hasImage ? (
+        <RNImage
+          source={{ uri }}
+          style={{ width: size, height: size, borderRadius: size / 2 }}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={[styles.placeholder, { width: size, height: size, borderRadius: size / 2 }]}>
+          <Ionicons name="person" size={size * 0.45} color={colors.textMuted} />
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    overflow: 'hidden',
+  placeholder: {
+    backgroundColor: '#E8E3D8',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -1,57 +1,39 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../../components/ui/Button';
 import { colors } from '../../constants/colors';
-import { radius, spacing } from '../../constants/spacing';
-
-type Role = 'buyer' | 'farmer' | null;
+import { spacing } from '../../constants/spacing';
 
 export default function RoleSelectScreen() {
   const router = useRouter();
-  const [selected, setSelected] = useState<Role>(null);
-
-  const handleContinue = () => {
-    if (selected) {
-      router.push(`/(auth)/login?role=${selected}`);
-    }
-  };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>أنت...</Text>
-
-        <TouchableOpacity
-          style={[styles.card, selected === 'buyer' && styles.cardSelected]}
-          onPress={() => setSelected('buyer')}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="cart-outline" size={40} color={colors.primary} style={styles.emoji} />
-          <Text style={styles.cardTitle}>مستهلك</Text>
-          <Text style={styles.cardSubtitle}>أريد شراء خضار طازج</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.card, selected === 'farmer' && styles.cardSelected]}
-          onPress={() => setSelected('farmer')}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="leaf-outline" size={40} color={colors.primary} style={styles.emoji} />
-          <Text style={styles.cardTitle}>مزارع</Text>
-          <Text style={styles.cardSubtitle}>أريد بيع منتجاتي مباشرة</Text>
-        </TouchableOpacity>
+        <View style={styles.iconContainer}>
+          <Ionicons name="leaf" size={60} color={colors.primary} />
+        </View>
+        <Text style={styles.title}>أهلاً بك في فلاحي</Text>
+        <Text style={styles.subtitle}>من الأرض لبيتك مباشرة</Text>
       </View>
 
       <View style={styles.bottom}>
         <Button
-          title="متابعة"
-          onPress={handleContinue}
+          title="إنشاء حساب جديد"
+          onPress={() => router.push('/(auth)/register-buyer')}
           fullWidth
           size="lg"
-          disabled={!selected}
+        />
+        <View style={{ height: spacing.sm }} />
+        <Button
+          title="عندي حساب — تسجيل دخول"
+          onPress={() => router.push('/(auth)/login')}
+          variant="outlined"
+          fullWidth
+          size="lg"
         />
       </View>
     </SafeAreaView>
@@ -65,49 +47,34 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  iconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#E8F5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
   },
   title: {
     fontFamily: 'Cairo_700Bold',
-    fontSize: 32,
+    fontSize: 28,
     color: colors.textPrimary,
     textAlign: 'center',
-    marginBottom: spacing.xl,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.xl,
-    padding: spacing.lg,
-    alignItems: 'center',
-    height: 160,
-    justifyContent: 'center',
-    marginBottom: spacing.md,
-  },
-  cardSelected: {
-    borderColor: colors.primary,
-    borderWidth: 2,
-    backgroundColor: '#F5F9F2',
-  },
-  emoji: {
-    fontSize: 40,
     marginBottom: spacing.sm,
   },
-  cardTitle: {
-    fontFamily: 'Cairo_700Bold',
-    fontSize: 22,
-    color: colors.textPrimary,
-  },
-  cardSubtitle: {
+  subtitle: {
     fontFamily: 'Cairo_400Regular',
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 4,
+    fontSize: 16,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
   bottom: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.xl,
   },
 });

@@ -1,479 +1,190 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
-  View, Text, TextInput, StyleSheet, TouchableOpacity,
-  ScrollView, KeyboardAvoidingView, Platform, Keyboard,
-  TouchableWithoutFeedback, Modal, FlatList, Alert,
+  View, Text, StyleSheet, TouchableOpacity, Alert,
+  KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
-import { useSupabaseAuth } from '../../hooks/useSupabaseAuth';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 
-const countryCodes = [
-  { code: '+970', flag: '\u{1F1F5}\u{1F1F8}', name: 'فلسطين' },
-  { code: '+962', flag: '\u{1F1EF}\u{1F1F4}', name: 'الأردن' },
-  { code: '+966', flag: '\u{1F1F8}\u{1F1E6}', name: 'السعودية' },
-  { code: '+971', flag: '\u{1F1E6}\u{1F1EA}', name: 'الإمارات' },
-  { code: '+961', flag: '\u{1F1F1}\u{1F1E7}', name: 'لبنان' },
-  { code: '+20', flag: '\u{1F1EA}\u{1F1EC}', name: 'مصر' },
-  { code: '+964', flag: '\u{1F1EE}\u{1F1F6}', name: 'العراق' },
-  { code: '+968', flag: '\u{1F1F4}\u{1F1F2}', name: 'عُمان' },
-  { code: '+974', flag: '\u{1F1F6}\u{1F1E6}', name: 'قطر' },
-  { code: '+965', flag: '\u{1F1F0}\u{1F1FC}', name: 'الكويت' },
-  { code: '+973', flag: '\u{1F1E7}\u{1F1ED}', name: 'البحرين' },
-  { code: '+90', flag: '\u{1F1F9}\u{1F1F7}', name: 'تركيا' },
-  { code: '+1', flag: '\u{1F1FA}\u{1F1F8}', name: 'أمريكا' },
-];
-
 export default function LoginScreen() {
   const router = useRouter();
-  const { role } = useLocalSearchParams<{ role: string }>();
   const login = useAuthStore((s) => s.login);
-  const { sendOtp, verifyOtp, getProfile } = useSupabaseAuth();
   const [phone, setPhone] = useState('');
-  const [showOTP, setShowOTP] = useState(false);
-  const [otp, setOtp] = useState(['', '', '', '']);
   const [loading, setLoading] = useState(false);
-  const [sendingOtp, setSendingOtp] = useState(false);
-  const [selectedCountry, setSelectedCountry] = useState(countryCodes[0]);
-  const [showCountryPicker, setShowCountryPicker] = useState(false);
-  const otpRefs = useRef<(TextInput | null)[]>([]);
 
-  const fullPhone = `${selectedCountry.code}${phone}`;
-
-  const handleSendOTP = async () => {
-    if (phone.length < 9) return;
-    Keyboard.dismiss();
-    setSendingOtp(true);
-    try {
-      // Note: Supabase phone OTP requires an SMS provider (e.g., Twilio) to be configured.
-      // For testing, you can add test phone numbers in the Supabase dashboard under
-      // Authentication > Phone Auth > Test Phone Numbers.
-      const { error } = await sendOtp(fullPhone);
-      if (error) {
-        Alert.alert('خطأ', error.message);
-      } else {
-        setShowOTP(true);
-      }
-    } catch (err: any) {
-      Alert.alert('خطأ', err?.message || 'حدث خطأ في إرسال رمز التحقق');
-    } finally {
-      setSendingOtp(false);
+  const handleLogin = async () => {
+    if (phone.length < 9) {
+      Alert.alert('تنبيه', 'يرجى إدخال رقم هاتف صحيح');
+      return;
     }
-  };
-
-  const handleVerify = async () => {
-    const otpCode = otp.join('');
     setLoading(true);
     Keyboard.dismiss();
+
     try {
-      const userRole = (role === 'farmer' ? 'farmer' : 'buyer') as 'buyer' | 'farmer';
+      // Search for user by phone number
+      const { data: profiles, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .or(`phone.ilike.%${phone}%,phone.ilike.%${phone.replace(/^0/, '')}%`)
+        .limit(1);
 
-      // Dev shortcut: OTP "1234" creates a real Supabase account using email auth
-      if (otpCode === '1234') {
-        const devEmail = `${phone.replace(/\D/g, '')}@example.com`;
-        const devPassword = `fallahy_${phone}`;
-
-        // Try sign in first, then sign up if new user
-        let session = null;
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email: devEmail,
-          password: devPassword,
-        });
-
-        if (signInData?.session) {
-          session = signInData.session;
-        } else {
-          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-            email: devEmail,
-            password: devPassword,
-            options: { data: { name: '', role: userRole, phone: fullPhone } },
-          });
-          if (signUpError) {
-            Alert.alert('خطأ', signUpError.message);
-            setLoading(false);
-            return;
-          }
-          session = signUpData?.session;
-        }
-
-        if (session?.user) {
-          const { data: profile } = await getProfile(session.user.id);
-          if (profile?.name) {
-            login({ id: profile.id, name: profile.name, phone: profile.phone || fullPhone, role: profile.role as 'buyer' | 'farmer', avatar: profile.avatar_url, city: profile.city, address: profile.address }, profile.role as 'buyer' | 'farmer');
-            setLoading(false);
-            router.replace(profile.role === 'farmer' ? '/(farmer)' : '/(buyer)');
-          } else {
-            login({ id: session.user.id, name: '', phone: fullPhone, role: userRole }, userRole);
-            setLoading(false);
-            router.push(userRole === 'farmer' ? '/(auth)/register-farmer' : '/(auth)/register-buyer');
-          }
-        } else {
-          Alert.alert('خطأ', 'فشل إنشاء الحساب');
-          setLoading(false);
-        }
-        return;
-      }
-
-      const { data, error } = await verifyOtp(fullPhone, otpCode);
       if (error) {
         Alert.alert('خطأ', error.message);
         setLoading(false);
         return;
       }
 
-      const session = data?.session;
-      if (!session?.user) {
-        Alert.alert('خطأ', 'فشل التحقق، يرجى المحاولة مرة أخرى');
+      if (!profiles || profiles.length === 0) {
+        Alert.alert(
+          'الحساب غير موجود',
+          'لم نعثر على حساب بهذا الرقم. هل تريد إنشاء حساب جديد؟',
+          [
+            { text: 'إنشاء حساب', onPress: () => router.push('/(auth)/register-buyer') },
+            { text: 'إلغاء', style: 'cancel' },
+          ]
+        );
         setLoading(false);
         return;
       }
 
-      // Check if the user already has a profile
-      const { data: profile } = await getProfile(session.user.id);
+      const profile = profiles[0];
 
-      if (profile?.name) {
-        // Existing user with a complete profile
-        const existingRole = (profile.role as 'buyer' | 'farmer') || userRole;
-        login(
-          {
-            id: profile.id,
-            name: profile.name,
-            phone: profile.phone || fullPhone,
-            role: existingRole,
-            avatar: profile.avatar_url,
-            city: profile.city,
-            address: profile.address,
-          },
-          existingRole
-        );
+      // Sign in anonymously and link to this profile
+      const { data: authData, error: authError } = await supabase.auth.signInAnonymously();
+      if (authError) {
+        Alert.alert('خطأ', authError.message);
         setLoading(false);
-        if (existingRole === 'farmer') {
-          router.replace('/(farmer)');
-        } else {
-          router.replace('/(buyer)');
-        }
+        return;
+      }
+
+      // Update the anonymous user to point to this profile
+      if (authData.user) {
+        await supabase.from('profiles').upsert({
+          id: authData.user.id,
+          name: profile.name,
+          phone: profile.phone,
+          city: profile.city,
+          address: profile.address,
+          role: profile.role,
+          avatar_url: profile.avatar_url,
+          farm_name: profile.farm_name,
+          specialty: profile.specialty,
+        });
+      }
+
+      const userRole = (profile.role as 'buyer' | 'farmer') || 'buyer';
+      login(
+        {
+          id: authData.user?.id || profile.id,
+          name: profile.name,
+          phone: profile.phone || '',
+          role: userRole,
+          avatar: profile.avatar_url,
+          city: profile.city,
+          address: profile.address,
+        },
+        userRole
+      );
+
+      if (userRole === 'farmer') {
+        router.replace('/(farmer)');
       } else {
-        // New user — navigate to registration screen
-        setLoading(false);
-        if (userRole === 'farmer') {
-          router.push('/(auth)/register-farmer');
-        } else {
-          router.push('/(auth)/register-buyer');
-        }
+        router.replace('/(buyer)');
       }
     } catch (err: any) {
-      Alert.alert('خطأ', err?.message || 'حدث خطأ في التحقق');
+      Alert.alert('خطأ', err?.message || 'حدث خطأ');
+    } finally {
       setLoading(false);
-    }
-  };
-
-  const handleOTPChange = (text: string, index: number) => {
-    const newOtp = [...otp];
-    newOtp[index] = text;
-    setOtp(newOtp);
-    if (text && index < 3) {
-      otpRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleOTPKeyPress = (index: number, key: string) => {
-    if (key === 'Backspace' && !otp[index] && index > 0) {
-      otpRefs.current[index - 1]?.focus();
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.content}>
-              <Ionicons name="leaf" size={48} color={colors.primary} style={styles.logo} />
-              <Text style={styles.title}>مرحباً بك</Text>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()}>
+              <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>تسجيل الدخول</Text>
+            <View style={{ width: 24 }} />
+          </View>
 
-              <View style={styles.phoneRow}>
-                <View style={styles.phoneInput}>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="رقم الهاتف"
-                    placeholderTextColor={colors.textMuted}
-                    value={phone}
-                    onChangeText={setPhone}
-                    keyboardType="phone-pad"
-                    textAlign="right"
-                    maxLength={10}
-                  />
-                </View>
-                <TouchableOpacity
-                  style={styles.countryCode}
-                  onPress={() => setShowCountryPicker(true)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.countryCodeText}>
-                    {selectedCountry.flag} {selectedCountry.code}
-                  </Text>
-                  <Text style={styles.chevron}>▼</Text>
-                </TouchableOpacity>
-              </View>
+          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+            <View style={styles.iconContainer}>
+              <Ionicons name="person-outline" size={50} color={colors.primary} />
+            </View>
 
-              {!showOTP ? (
-                <Button
-                  title="إرسال رمز التحقق"
-                  onPress={handleSendOTP}
-                  fullWidth
-                  size="lg"
-                  disabled={phone.length < 9}
-                  loading={sendingOtp}
-                />
-              ) : (
-                <>
-                  <Text style={styles.otpLabel}>أدخل رمز التحقق</Text>
-                  <View style={styles.otpRow}>
-                    {otp.map((digit, index) => (
-                      <TextInput
-                        key={index}
-                        ref={(ref) => { otpRefs.current[index] = ref; }}
-                        style={[styles.otpBox, digit ? styles.otpBoxFilled : null]}
-                        value={digit}
-                        onChangeText={(text) => handleOTPChange(text, index)}
-                        onKeyPress={({ nativeEvent }) => handleOTPKeyPress(index, nativeEvent.key)}
-                        keyboardType="number-pad"
-                        maxLength={1}
-                        textAlign="center"
-                      />
-                    ))}
-                  </View>
-                  <Button
-                    title="تحقق"
-                    onPress={handleVerify}
-                    fullWidth
-                    size="lg"
-                    loading={loading}
-                  />
-                </>
-              )}
+            <Text style={styles.title}>مرحباً بعودتك</Text>
+            <Text style={styles.subtitle}>أدخل رقم هاتفك المسجّل عندنا</Text>
 
-              <Text
-                style={styles.link}
-                onPress={() => {
-                  if (role === 'farmer') {
-                    router.push('/(auth)/register-farmer');
-                  } else {
-                    router.push('/(auth)/register-buyer');
-                  }
-                }}
-              >
-                تسجيل حساب جديد
-              </Text>
+            <View style={styles.form}>
+              <Input
+                label="رقم الهاتف"
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="مثال: 591234567"
+                keyboardType="phone-pad"
+                autoFocus
+              />
             </View>
           </ScrollView>
+
+          <View style={styles.bottom}>
+            <Button
+              title="تسجيل الدخول"
+              onPress={handleLogin}
+              fullWidth
+              size="lg"
+              loading={loading}
+              disabled={phone.length < 9}
+            />
+            <TouchableOpacity onPress={() => router.push('/(auth)/register-buyer')} style={styles.linkBtn}>
+              <Text style={styles.linkText}>ما عندك حساب؟ سجّل الآن</Text>
+            </TouchableOpacity>
+          </View>
         </KeyboardAvoidingView>
       </TouchableWithoutFeedback>
-
-      {/* Country Code Picker Modal */}
-      <Modal visible={showCountryPicker} transparent animationType="slide">
-        <TouchableWithoutFeedback onPress={() => setShowCountryPicker(false)}>
-          <View style={styles.modalBackdrop} />
-        </TouchableWithoutFeedback>
-        <View style={styles.modalSheet}>
-          <View style={styles.modalHandle} />
-          <Text style={styles.modalTitle}>اختر رمز الدولة</Text>
-          <FlatList
-            data={countryCodes}
-            keyExtractor={(item) => item.code}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[
-                  styles.countryItem,
-                  selectedCountry.code === item.code && styles.countryItemSelected,
-                ]}
-                onPress={() => {
-                  setSelectedCountry(item);
-                  setShowCountryPicker(false);
-                }}
-              >
-                <Text style={styles.countryItemCode}>{item.code}</Text>
-                <View style={styles.countryItemRight}>
-                  <Text style={styles.countryItemName}>{item.name}</Text>
-                  <Text style={styles.countryItemFlag}>{item.flag}</Text>
-                </View>
-              </TouchableOpacity>
-            )}
-          />
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
+  container: { flex: 1, backgroundColor: colors.background },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
   },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  content: {
-    paddingHorizontal: spacing.lg,
-  },
-  logo: {
-    fontSize: 48,
-    textAlign: 'center',
-    marginBottom: spacing.md,
+  headerTitle: { fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textPrimary },
+  scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.lg },
+  iconContainer: {
+    width: 90, height: 90, borderRadius: 45,
+    backgroundColor: '#E8F5E1', alignItems: 'center', justifyContent: 'center',
+    alignSelf: 'center', marginBottom: spacing.lg,
   },
   title: {
-    fontFamily: 'Cairo_700Bold',
-    fontSize: 28,
-    color: colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: spacing.xl,
+    fontFamily: 'Cairo_700Bold', fontSize: 26, color: colors.textPrimary,
+    textAlign: 'center', marginBottom: spacing.xs,
   },
-  phoneRow: {
-    flexDirection: 'row',
-    marginBottom: spacing.md,
-    gap: spacing.sm,
+  subtitle: {
+    fontFamily: 'Cairo_400Regular', fontSize: 15, color: colors.textMuted,
+    textAlign: 'center', marginBottom: spacing.xl,
   },
-  phoneInput: {
-    flex: 1,
-    backgroundColor: colors.surfaceDim,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    height: 52,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
+  form: { width: '100%' },
+  bottom: {
+    paddingHorizontal: spacing.lg, paddingBottom: spacing.lg,
   },
-  input: {
-    fontFamily: 'Cairo_400Regular',
-    fontSize: 16,
-    color: colors.textPrimary,
-  },
-  countryCode: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surfaceDim,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    height: 52,
-    paddingHorizontal: spacing.md,
-    gap: 6,
-  },
-  countryCodeText: {
-    fontFamily: 'Cairo_600SemiBold',
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
-  chevron: {
-    fontSize: 10,
-    color: colors.textMuted,
-  },
-  otpLabel: {
-    fontFamily: 'Cairo_600SemiBold',
-    fontSize: 16,
-    color: colors.textPrimary,
-    textAlign: 'center',
-    marginTop: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  otpRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 12,
-    marginBottom: spacing.lg,
-  },
-  otpBox: {
-    width: 56,
-    height: 56,
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    fontFamily: 'Cairo_700Bold',
-    fontSize: 24,
-    color: colors.textPrimary,
-  },
-  otpBoxFilled: {
-    borderColor: colors.primary,
-    backgroundColor: '#F5F9F2',
-  },
-  link: {
-    fontFamily: 'Cairo_600SemiBold',
-    fontSize: 15,
-    color: colors.primary,
-    textAlign: 'center',
-    marginTop: spacing.lg,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  modalSheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '60%',
-    paddingBottom: 34,
-  },
-  modalHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  modalTitle: {
-    fontFamily: 'Cairo_700Bold',
-    fontSize: 18,
-    color: colors.textPrimary,
-    textAlign: 'center',
-    paddingVertical: spacing.sm,
-  },
-  countryItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  countryItemSelected: {
-    backgroundColor: '#F5F9F2',
-  },
-  countryItemRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  countryItemFlag: {
-    fontSize: 24,
-  },
-  countryItemName: {
-    fontFamily: 'Cairo_600SemiBold',
-    fontSize: 16,
-    color: colors.textPrimary,
-  },
-  countryItemCode: {
-    fontFamily: 'Cairo_400Regular',
-    fontSize: 15,
-    color: colors.textMuted,
+  linkBtn: { alignItems: 'center', paddingVertical: spacing.sm },
+  linkText: {
+    fontFamily: 'Cairo_600SemiBold', fontSize: 15, color: colors.primary,
   },
 });
