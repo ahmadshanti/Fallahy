@@ -50,9 +50,6 @@ export default function BuyerHomeScreen() {
             </TouchableOpacity>
             <TouchableOpacity style={styles.iconBtn}>
               <Ionicons name="notifications-outline" size={22} color={colors.textPrimary} />
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>3</Text>
-              </View>
             </TouchableOpacity>
           </View>
         </View>

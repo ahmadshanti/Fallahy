@@ -16,7 +16,7 @@ export default function OrderTrackingScreen() {
 
   const steps = [
     { title: 'تم استلام طلبك', subtitle: 'تم تأكيد الطلب بنجاح', status: 'done' as const, timestamp: '10:30 AM' },
-    { title: 'المزارع يجهّز طلبك', subtitle: 'أبو أحمد يقوم بتغليف الخضروات الآن', status: 'active' as const },
+    { title: 'المزارع يجهّز طلبك', subtitle: `${order?.farmerName || 'المزارع'} يقوم بتغليف طلبك الآن`, status: 'active' as const },
     { title: 'في الطريق إليك', subtitle: 'يتم تعيين مندوب التوصيل', status: 'pending' as const },
     { title: 'وصل', subtitle: 'بالهناء والشفاء', status: 'pending' as const },
   ];

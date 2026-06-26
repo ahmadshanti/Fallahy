@@ -50,7 +50,7 @@ export default function FarmerProfileScreen() {
         {/* Hero */}
         <View style={styles.hero}>
           <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1500651230702-0e2d8a49d4ad?w=800' }}
+            source={{ uri: farmer?.avatar || '' }}
             style={styles.coverImage}
             contentFit="cover"
           />

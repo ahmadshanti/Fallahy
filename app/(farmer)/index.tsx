@@ -34,7 +34,7 @@ export default function FarmerDashboard() {
               <Text style={styles.greeting}>صباح الخير</Text>
               <Text style={styles.farmName}>{user?.name || 'مزرعتي'}</Text>
             </View>
-            <Avatar uri={user?.avatar || 'https://i.pravatar.cc/100?img=12'} size={60} />
+            <Avatar uri={user?.avatar || ''} size={60} />
           </View>
         </View>
 

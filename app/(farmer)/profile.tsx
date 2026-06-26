@@ -1,77 +1,246 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View, Text, ScrollView, TouchableOpacity, TextInput,
+  StyleSheet, Alert, Image as RNImage,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import Avatar from '../../components/ui/Avatar';
-import Badge from '../../components/ui/Badge';
+import Button from '../../components/ui/Button';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 import { useAuthStore } from '../../store/authStore';
 import { useFarmerMetrics } from '../../hooks/useEarnings';
+import { supabase } from '../../lib/supabase';
 
-const menuItems = [
+type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
+
+const menuItems: { label: string; icon: IoniconsName; route?: string }[] = [
   { label: 'معلومات المزرعة', icon: 'home-outline' },
-  { label: 'التحليلات', icon: 'bar-chart-outline' },
-  { label: 'التوثيق', icon: 'checkmark-circle-outline' },
-  { label: 'الإعدادات', icon: 'settings-outline' },
-  { label: 'الدعم الفني', icon: 'call-outline' },
+  { label: 'منتجاتي', icon: 'cube-outline', route: '/(farmer)/products' },
+  { label: 'التحليلات', icon: 'bar-chart-outline', route: '/(farmer)/analytics' },
+  { label: 'التنبيهات', icon: 'notifications-outline', route: '/(farmer)/alerts' },
+  { label: 'المساعدة', icon: 'help-circle-outline' },
 ];
 
 export default function FarmerProfileScreen() {
   const router = useRouter();
-  const { user, logout } = useAuthStore();
+  const { user, logout, updateUser } = useAuthStore();
   const { data: metrics } = useFarmerMetrics(user?.id || '');
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(user?.name || '');
+  const [editPhone, setEditPhone] = useState(user?.phone || '');
+  const [editCity, setEditCity] = useState(user?.city || '');
+  const [editAddress, setEditAddress] = useState(user?.address || '');
+  const [newAvatar, setNewAvatar] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
   const handleLogout = () => {
-    logout();
-    router.replace('/(auth)/splash');
+    Alert.alert('تسجيل الخروج', 'هل أنت متأكد؟', [
+      { text: 'إلغاء', style: 'cancel' },
+      { text: 'خروج', style: 'destructive', onPress: () => { logout(); router.replace('/(auth)/splash'); } },
+    ]);
   };
+
+  const pickAvatar = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('تنبيه', 'يرجى السماح بالوصول للصور');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      setNewAvatar(result.assets[0].uri);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user) return;
+    setIsSaving(true);
+    try {
+      let avatarUrl = user.avatar;
+
+      if (newAvatar) {
+        const fileExt = newAvatar.split('.').pop()?.split('?')[0] || 'jpg';
+        const fileName = `${user.id}/avatar_${Date.now()}.${fileExt}`;
+        const formData = new FormData();
+        formData.append('file', { uri: newAvatar, name: `avatar.${fileExt}`, type: `image/${fileExt}` } as any);
+        const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, formData, { upsert: true });
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
+          avatarUrl = urlData.publicUrl;
+        }
+      }
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          name: editName,
+          phone: editPhone,
+          city: editCity,
+          address: editAddress,
+          farm_name: editName,
+          avatar_url: avatarUrl,
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      updateUser({ name: editName, phone: editPhone, city: editCity, address: editAddress, avatar: avatarUrl });
+      setNewAvatar(null);
+      setIsEditing(false);
+      Alert.alert('', 'تم تحديث الملف الشخصي');
+    } catch {
+      Alert.alert('خطأ', 'فشل في حفظ التعديلات');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleMenuPress = (item: typeof menuItems[0]) => {
+    if (item.route) {
+      router.push(item.route as any);
+    } else if (item.label === 'معلومات المزرعة') {
+      setIsEditing(true);
+    } else if (item.label === 'المساعدة') {
+      Alert.alert('المساعدة', 'للتواصل مع الدعم:\nsupport@fallahy.app');
+    }
+  };
+
+  const displayAvatar = newAvatar || user?.avatar || '';
+
+  // Edit Mode
+  if (isEditing) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.editHeader}>
+          <TouchableOpacity onPress={() => { setIsEditing(false); setNewAvatar(null); }}>
+            <Text style={styles.cancelText}>إلغاء</Text>
+          </TouchableOpacity>
+          <Text style={styles.editHeaderTitle}>تعديل الملف الشخصي</Text>
+          <View style={{ width: 50 }} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.editScroll} showsVerticalScrollIndicator={false}>
+          <TouchableOpacity style={styles.editAvatarContainer} onPress={pickAvatar}>
+            {(newAvatar || displayAvatar) ? (
+              <RNImage source={{ uri: newAvatar || displayAvatar }} style={styles.editAvatarImage} />
+            ) : (
+              <View style={styles.editAvatarPlaceholder}>
+                <Ionicons name="person" size={40} color={colors.textMuted} />
+              </View>
+            )}
+            <View style={styles.editAvatarBadge}>
+              <Ionicons name="camera" size={14} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.editField}>
+            <Text style={styles.editLabel}>اسم المزرعة</Text>
+            <TextInput style={styles.editInput} value={editName} onChangeText={setEditName} textAlign="right" placeholder="اسم المزرعة" placeholderTextColor={colors.textMuted} />
+          </View>
+
+          <View style={styles.editField}>
+            <Text style={styles.editLabel}>رقم الهاتف</Text>
+            <TextInput style={styles.editInput} value={editPhone} onChangeText={setEditPhone} textAlign="right" placeholder="رقم الهاتف" keyboardType="phone-pad" placeholderTextColor={colors.textMuted} />
+          </View>
+
+          <View style={styles.editField}>
+            <Text style={styles.editLabel}>المدينة</Text>
+            <TextInput style={styles.editInput} value={editCity} onChangeText={setEditCity} textAlign="right" placeholder="المدينة" placeholderTextColor={colors.textMuted} />
+          </View>
+
+          <View style={styles.editField}>
+            <Text style={styles.editLabel}>العنوان</Text>
+            <TextInput style={styles.editInput} value={editAddress} onChangeText={setEditAddress} textAlign="right" placeholder="الحي / الشارع" placeholderTextColor={colors.textMuted} />
+          </View>
+
+          <Button title="حفظ التعديلات" onPress={handleSave} fullWidth size="lg" loading={isSaving} />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-        <View style={styles.profileHeader}>
-          <Avatar uri={user?.avatar || 'https://i.pravatar.cc/100?img=12'} size={80} />
+        {/* Profile Card */}
+        <View style={styles.profileCard}>
+          <TouchableOpacity onPress={() => setIsEditing(true)}>
+            <View style={styles.avatarWrapper}>
+              <Avatar uri={displayAvatar} size={90} />
+              <View style={styles.avatarEditBadge}>
+                <Ionicons name="pencil" size={12} color="#FFFFFF" />
+              </View>
+            </View>
+          </TouchableOpacity>
+
           <Text style={styles.farmName}>{user?.name || ''}</Text>
-          <Badge label="مزارع موثّق ✓" variant="verified" />
+          {user?.city && <Text style={styles.farmCity}>{user.city}</Text>}
+          {user?.phone && (
+            <View style={styles.phoneRow}>
+              <Ionicons name="logo-whatsapp" size={16} color="#25D366" />
+              <Text style={styles.phoneText}>{user.phone}</Text>
+            </View>
+          )}
         </View>
 
+        {/* Stats */}
         <View style={styles.statsRow}>
-          <View style={styles.stat}>
+          <View style={styles.statItem}>
             <Text style={styles.statValue}>{metrics?.totalProducts || 0}</Text>
             <Text style={styles.statLabel}>منتج</Text>
           </View>
           <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>4.8</Text>
-            <Text style={styles.statLabel}>التقييم</Text>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{metrics?.ordersToday || 0}</Text>
+            <Text style={styles.statLabel}>طلبات اليوم</Text>
           </View>
           <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{metrics?.ordersToday || 0}</Text>
-            <Text style={styles.statLabel}>طلب</Text>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{metrics?.salesToday || 0} ₪</Text>
+            <Text style={styles.statLabel}>مبيعات اليوم</Text>
           </View>
         </View>
 
-        <View style={styles.menu}>
-          {menuItems.map((item) => (
-            <TouchableOpacity key={item.label} style={styles.menuItem}>
+        {/* Edit Profile Button */}
+        <TouchableOpacity style={styles.editProfileBtn} onPress={() => setIsEditing(true)}>
+          <Ionicons name="create-outline" size={18} color={colors.primary} />
+          <Text style={styles.editProfileText}>تعديل الملف الشخصي</Text>
+        </TouchableOpacity>
+
+        {/* Menu */}
+        <View style={styles.menuSection}>
+          {menuItems.map((item, index) => (
+            <TouchableOpacity
+              key={item.label}
+              style={[styles.menuItem, index === menuItems.length - 1 && { borderBottomWidth: 0 }]}
+              onPress={() => handleMenuPress(item)}
+            >
               <Ionicons name="chevron-back" size={20} color={colors.textMuted} />
               <View style={styles.menuContent}>
                 <Text style={styles.menuLabel}>{item.label}</Text>
-                <Ionicons name={item.icon as any} size={20} color={colors.textPrimary} />
+                <View style={styles.menuIconCircle}>
+                  <Ionicons name={item.icon} size={20} color={colors.primary} />
+                </View>
               </View>
             </TouchableOpacity>
           ))}
-          <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
-            <Ionicons name="chevron-back" size={20} color={colors.textMuted} />
-            <View style={styles.menuContent}>
-              <Text style={[styles.menuLabel, styles.logoutText]}>تسجيل الخروج</Text>
-              <Ionicons name="log-out-outline" size={20} color={colors.textPrimary} />
-            </View>
-          </TouchableOpacity>
         </View>
+
+        {/* Logout */}
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={20} color={colors.error} />
+          <Text style={styles.logoutText}>تسجيل الخروج</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -79,23 +248,81 @@ export default function FarmerProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  profileHeader: {
-    alignItems: 'center', paddingVertical: spacing.lg, gap: spacing.sm,
+
+  // Edit Mode
+  editHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  farmName: {
-    fontFamily: 'Cairo_700Bold', fontSize: 22, color: colors.textPrimary,
+  editHeaderTitle: { fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textPrimary },
+  cancelText: { fontFamily: 'Cairo_600SemiBold', fontSize: 15, color: colors.error },
+  editScroll: { padding: spacing.lg },
+  editAvatarContainer: { alignSelf: 'center', marginBottom: spacing.lg, position: 'relative' },
+  editAvatarImage: { width: 100, height: 100, borderRadius: 50 },
+  editAvatarPlaceholder: {
+    width: 100, height: 100, borderRadius: 50,
+    backgroundColor: '#E8E3D8', alignItems: 'center', justifyContent: 'center',
   },
-  statsRow: {
-    flexDirection: 'row', backgroundColor: colors.surface, borderRadius: radius.xl,
-    marginHorizontal: spacing.md, padding: spacing.md, marginBottom: spacing.md,
+  editAvatarBadge: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: colors.background,
   },
-  stat: { flex: 1, alignItems: 'center' },
-  statValue: { fontFamily: 'Cairo_700Bold', fontSize: 20, color: colors.textPrimary },
-  statLabel: { fontFamily: 'Cairo_400Regular', fontSize: 12, color: colors.textMuted },
-  statDivider: { width: 1, height: 30, backgroundColor: colors.border, alignSelf: 'center' },
-  menu: {
+  editField: { marginBottom: spacing.md },
+  editLabel: {
+    fontFamily: 'Cairo_600SemiBold', fontSize: 13, color: colors.textMuted,
+    textAlign: 'right', marginBottom: spacing.xs,
+  },
+  editInput: {
+    fontFamily: 'Cairo_400Regular', fontSize: 16, color: colors.textPrimary,
+    backgroundColor: colors.surface, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.border, height: 50,
+    paddingHorizontal: spacing.md, writingDirection: 'rtl',
+  },
+
+  // Profile View
+  profileCard: {
+    alignItems: 'center', paddingVertical: spacing.lg,
+    marginHorizontal: spacing.md, marginTop: spacing.sm,
     backgroundColor: colors.surface, borderRadius: radius.xl,
-    marginHorizontal: spacing.md, overflow: 'hidden',
+  },
+  avatarWrapper: { position: 'relative', marginBottom: spacing.sm },
+  avatarEditBadge: {
+    position: 'absolute', bottom: 2, right: 2,
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: colors.surface,
+  },
+  farmName: { fontFamily: 'Cairo_700Bold', fontSize: 22, color: colors.textPrimary },
+  farmCity: { fontFamily: 'Cairo_400Regular', fontSize: 14, color: colors.textMuted, marginTop: 2 },
+  phoneRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  phoneText: { fontFamily: 'Cairo_400Regular', fontSize: 13, color: colors.textMuted },
+
+  // Stats
+  statsRow: {
+    flexDirection: 'row', marginHorizontal: spacing.md, marginTop: spacing.md,
+    backgroundColor: colors.surface, borderRadius: radius.xl, padding: spacing.md,
+  },
+  statItem: { flex: 1, alignItems: 'center' },
+  statValue: { fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textPrimary },
+  statLabel: { fontFamily: 'Cairo_400Regular', fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  statDivider: { width: 1, height: 30, backgroundColor: colors.border, alignSelf: 'center' },
+
+  // Edit Profile Button
+  editProfileBtn: {
+    flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center',
+    gap: spacing.sm, marginHorizontal: spacing.md, marginTop: spacing.md,
+    paddingVertical: 12, borderRadius: radius.xl,
+    borderWidth: 1.5, borderColor: colors.primary,
+  },
+  editProfileText: { fontFamily: 'Cairo_600SemiBold', fontSize: 15, color: colors.primary },
+
+  // Menu
+  menuSection: {
+    marginHorizontal: spacing.md, marginTop: spacing.md,
+    backgroundColor: colors.surface, borderRadius: radius.xl, overflow: 'hidden',
   },
   menuItem: {
     flexDirection: 'row', alignItems: 'center', padding: spacing.md,
@@ -104,8 +331,18 @@ const styles = StyleSheet.create({
   menuContent: {
     flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: spacing.sm,
   },
-  menuIcon: { fontSize: 20 },
+  menuIconCircle: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#E8F5E1', alignItems: 'center', justifyContent: 'center',
+  },
   menuLabel: { fontFamily: 'Cairo_600SemiBold', fontSize: 15, color: colors.textPrimary },
-  menuChevron: { fontSize: 20, color: colors.textMuted },
-  logoutText: { color: colors.error },
+
+  // Logout
+  logoutBtn: {
+    flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center',
+    gap: spacing.sm, marginHorizontal: spacing.md, marginTop: spacing.lg,
+    paddingVertical: 14, borderRadius: radius.xl,
+    borderWidth: 1, borderColor: colors.error,
+  },
+  logoutText: { fontFamily: 'Cairo_600SemiBold', fontSize: 15, color: colors.error },
 });
