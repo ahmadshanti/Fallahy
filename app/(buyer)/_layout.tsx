@@ -1,18 +1,23 @@
 import React from 'react';
+import { Platform, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
-import { Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../constants/colors';
 
-function TabIcon({ name, focused }: { name: string; focused: boolean }) {
-  const icons: Record<string, string> = {
-    index: '🏠',
-    explore: '🔍',
-    orders: '🛍️',
-    chat: '💬',
-    profile: '👤',
-  };
-  return <Text style={[styles.icon, focused && styles.iconActive]}>{icons[name] || '●'}</Text>;
-}
+type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
+
+const buyerTabs: { name: string; title: string; icon: IoniconsName; iconFocused: IoniconsName }[] = [
+  { name: 'index', title: 'الرئيسية', icon: 'home-outline', iconFocused: 'home' },
+  { name: 'explore', title: 'تصفح', icon: 'search-outline', iconFocused: 'search' },
+  { name: 'orders', title: 'طلباتي', icon: 'bag-outline', iconFocused: 'bag' },
+  { name: 'chat', title: 'الدردشة', icon: 'chatbubble-outline', iconFocused: 'chatbubble' },
+  { name: 'profile', title: 'حسابي', icon: 'person-outline', iconFocused: 'person' },
+];
+
+const hiddenScreens = [
+  'product/[id]', 'farmer/[id]', 'cart', 'checkout',
+  'order-tracking/[id]', 'map', 'alerts', 'adopt-tree', 'pick-your-own',
+];
 
 export default function BuyerLayout() {
   return (
@@ -25,50 +30,29 @@ export default function BuyerLayout() {
         tabBarLabelStyle: styles.tabLabel,
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'الرئيسية',
-          tabBarIcon: ({ focused }) => <TabIcon name="index" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: 'تصفح',
-          tabBarIcon: ({ focused }) => <TabIcon name="explore" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="orders"
-        options={{
-          title: 'طلباتي',
-          tabBarIcon: ({ focused }) => <TabIcon name="orders" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="chat"
-        options={{
-          title: 'الدردشة',
-          tabBarIcon: ({ focused }) => <TabIcon name="chat" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'حسابي',
-          tabBarIcon: ({ focused }) => <TabIcon name="profile" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen name="product/[id]" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="farmer/[id]" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="cart" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="checkout" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="order-tracking/[id]" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="map" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="alerts" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="adopt-tree" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="pick-your-own" options={{ href: null, tabBarStyle: { display: 'none' } }} />
+      {buyerTabs.map((tab) => (
+        <Tabs.Screen
+          key={tab.name}
+          name={tab.name}
+          options={{
+            title: tab.title,
+            tabBarIcon: ({ focused, color }) => (
+              <Ionicons
+                name={focused ? tab.iconFocused : tab.icon}
+                size={24}
+                color={color}
+              />
+            ),
+          }}
+        />
+      ))}
+      {hiddenScreens.map((name) => (
+        <Tabs.Screen
+          key={name}
+          name={name}
+          options={{ href: null, tabBarStyle: { display: 'none' } }}
+        />
+      ))}
     </Tabs>
   );
 }
@@ -76,20 +60,19 @@ export default function BuyerLayout() {
 const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    height: 65,
-    paddingBottom: 8,
-    paddingTop: 4,
+    borderTopWidth: 0,
+    height: Platform.OS === 'ios' ? 85 : 70,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 10,
+    paddingTop: 8,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
   },
   tabLabel: {
     fontFamily: 'Cairo_600SemiBold',
     fontSize: 11,
-  },
-  icon: {
-    fontSize: 22,
-  },
-  iconActive: {
-    fontSize: 24,
+    marginTop: 2,
   },
 });

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../constants/colors';
 import { radius, shadow, spacing } from '../../constants/spacing';
 
@@ -13,7 +14,7 @@ export default function MetricCard({ icon, value, label }: MetricCardProps) {
   return (
     <View style={styles.card}>
       <View style={styles.iconContainer}>
-        <Text style={styles.icon}>{icon}</Text>
+        <Ionicons name={icon as any} size={18} color={colors.primary} />
       </View>
       <Text style={styles.value}>{value}</Text>
       <Text style={styles.label}>{label}</Text>

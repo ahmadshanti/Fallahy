@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { View, Text, FlatList, Dimensions, StyleSheet, ViewToken } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../../components/ui/Button';
@@ -11,19 +12,19 @@ const { width } = Dimensions.get('window');
 const slides = [
   {
     id: '1',
-    emoji: '🏪',
+    iconName: 'storefront-outline' as const,
     title: 'المشكلة',
     body: 'البندورة بالسوق بـ 5 شيكل... وعند المزارع بـ 3 شيكل',
   },
   {
     id: '2',
-    emoji: '🌿',
+    iconName: 'leaf-outline' as const,
     title: 'الحل',
     body: 'فلاحي يربطك مباشرة بالمزارع القريب منك',
   },
   {
     id: '3',
-    emoji: '🤝',
+    iconName: 'people-outline' as const,
     title: 'انضم إلينا',
     body: 'آلاف المزارعين والمستهلكين على المنصة',
   },
@@ -61,7 +62,7 @@ export default function OnboardingScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View style={[styles.slide, { width }]}>
-            <Text style={styles.emoji}>{item.emoji}</Text>
+            <Ionicons name={item.iconName as any} size={80} color={colors.primary} style={styles.emoji} />
             <Text style={styles.title}>{item.title}</Text>
             <Text style={styles.body}>{item.body}</Text>
           </View>

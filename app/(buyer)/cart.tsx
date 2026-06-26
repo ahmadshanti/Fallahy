@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -22,13 +23,13 @@ export default function CartScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
-            <Text style={styles.backIcon}>→</Text>
+            <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>سلتي</Text>
           <View style={{ width: 24 }} />
         </View>
         <View style={styles.empty}>
-          <Text style={styles.emptyEmoji}>🛒</Text>
+          <Ionicons name="cart-outline" size={60} color={colors.textMuted} />
           <Text style={styles.emptyTitle}>السلة فارغة</Text>
           <Text style={styles.emptySubtitle}>ابدأ بإضافة منتجات طازجة!</Text>
           <Button title="تصفح المنتجات" onPress={() => router.push('/(buyer)/explore')} />
@@ -41,7 +42,7 @@ export default function CartScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backIcon}>→</Text>
+          <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>سلتي ({items.length})</Text>
         <View style={{ width: 24 }} />
@@ -66,7 +67,7 @@ export default function CartScreen() {
                 </View>
               </View>
               <TouchableOpacity style={styles.deleteBtn} onPress={() => removeItem(item.id)}>
-                <Text style={styles.deleteIcon}>🗑</Text>
+                <Ionicons name="trash-outline" size={20} color={colors.error} />
               </TouchableOpacity>
             </View>
           );

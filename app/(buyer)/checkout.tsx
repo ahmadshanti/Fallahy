@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../../components/ui/Button';
@@ -25,7 +26,7 @@ export default function CheckoutScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backIcon}>→</Text>
+          <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>إتمام الطلب</Text>
         <View style={{ width: 24 }} />
@@ -39,7 +40,7 @@ export default function CheckoutScreen() {
             <Text style={styles.sectionTitle}>عنوان التوصيل</Text>
           </View>
           <View style={styles.addressCard}>
-            <Text style={styles.addressIcon}>📍</Text>
+            <Ionicons name="location-outline" size={20} color={colors.primary} />
             <Text style={styles.addressText}>رام الله، شارع الإرسال</Text>
           </View>
         </View>
@@ -67,9 +68,9 @@ export default function CheckoutScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>طريقة الدفع</Text>
           {[
-            { key: 'cash', label: 'نقداً عند الاستلام', icon: '💵' },
-            { key: 'card', label: 'بطاقة ائتمان', icon: '💳' },
-            { key: 'wallet', label: 'محفظة إلكترونية', icon: '📱' },
+            { key: 'cash', label: 'نقداً عند الاستلام', icon: 'cash-outline' as const },
+            { key: 'card', label: 'بطاقة ائتمان', icon: 'card-outline' as const },
+            { key: 'wallet', label: 'محفظة إلكترونية', icon: 'phone-portrait-outline' as const },
           ].map((method) => (
             <TouchableOpacity
               key={method.key}
@@ -77,7 +78,7 @@ export default function CheckoutScreen() {
               onPress={() => setPaymentMethod(method.key)}
             >
               <View style={[styles.radio, paymentMethod === method.key && styles.radioActive]} />
-              <Text style={styles.paymentIcon}>{method.icon}</Text>
+              <Ionicons name={method.icon} size={20} color={colors.textPrimary} />
               <Text style={styles.paymentLabel}>{method.label}</Text>
             </TouchableOpacity>
           ))}

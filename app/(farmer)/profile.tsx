@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Avatar from '../../components/ui/Avatar';
@@ -9,11 +10,11 @@ import { radius, spacing } from '../../constants/spacing';
 import { useAuthStore } from '../../store/authStore';
 
 const menuItems = [
-  { label: 'معلومات المزرعة', icon: '🏡' },
-  { label: 'التحليلات', icon: '📊' },
-  { label: 'التوثيق', icon: '✅' },
-  { label: 'الإعدادات', icon: '⚙️' },
-  { label: 'الدعم الفني', icon: '📞' },
+  { label: 'معلومات المزرعة', icon: 'home-outline' },
+  { label: 'التحليلات', icon: 'bar-chart-outline' },
+  { label: 'التوثيق', icon: 'checkmark-circle-outline' },
+  { label: 'الإعدادات', icon: 'settings-outline' },
+  { label: 'الدعم الفني', icon: 'call-outline' },
 ];
 
 export default function FarmerProfileScreen() {
@@ -54,18 +55,18 @@ export default function FarmerProfileScreen() {
         <View style={styles.menu}>
           {menuItems.map((item) => (
             <TouchableOpacity key={item.label} style={styles.menuItem}>
-              <Text style={styles.menuChevron}>‹</Text>
+              <Ionicons name="chevron-back" size={20} color={colors.textMuted} />
               <View style={styles.menuContent}>
                 <Text style={styles.menuLabel}>{item.label}</Text>
-                <Text style={styles.menuIcon}>{item.icon}</Text>
+                <Ionicons name={item.icon as any} size={20} color={colors.textPrimary} />
               </View>
             </TouchableOpacity>
           ))}
           <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
-            <Text style={styles.menuChevron}>‹</Text>
+            <Ionicons name="chevron-back" size={20} color={colors.textMuted} />
             <View style={styles.menuContent}>
               <Text style={[styles.menuLabel, styles.logoutText]}>تسجيل الخروج</Text>
-              <Text style={styles.menuIcon}>🚪</Text>
+              <Ionicons name="log-out-outline" size={20} color={colors.textPrimary} />
             </View>
           </TouchableOpacity>
         </View>

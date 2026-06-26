@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Avatar from '../ui/Avatar';
 import RatingStars from '../ui/RatingStars';
 import Badge from '../ui/Badge';
@@ -25,7 +26,10 @@ export default function FarmerCard({ farmer, onPress }: FarmerCardProps) {
         <View style={styles.content}>
           <Text style={styles.name}>{farmer.name}</Text>
           <RatingStars rating={farmer.rating} reviewCount={farmer.reviewCount} />
-          <Text style={styles.distance}>📍 {farmer.distance} كم</Text>
+          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4, marginTop: 2 }}>
+            <Ionicons name="location-outline" size={14} color={colors.textMuted} />
+            <Text style={[styles.distance, { marginTop: 0 }]}>{farmer.distance} كم</Text>
+          </View>
         </View>
         <TouchableOpacity style={styles.visitButton} onPress={onPress}>
           <Text style={styles.visitText}>زيارة</Text>

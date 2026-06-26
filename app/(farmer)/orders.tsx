@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import Avatar from '../../components/ui/Avatar';
@@ -61,7 +62,10 @@ export default function FarmerOrdersScreen() {
                 </View>
               )}
               <TouchableOpacity style={styles.whatsappLink}>
-                <Text style={styles.whatsappText}>تواصل مع المشتري 💬</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name="logo-whatsapp" size={16} color="#25D366" />
+                  <Text style={styles.whatsappText}>تواصل مع المشتري</Text>
+                </View>
               </TouchableOpacity>
             </View>
           )}

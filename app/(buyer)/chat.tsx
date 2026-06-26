@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
@@ -27,7 +28,7 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '0',
-      text: 'أهلاً! أنا مساعد فلاحي الذكي 🌿\nكيف ممكن أساعدك اليوم؟',
+      text: 'أهلاً! أنا مساعد فلاحي الذكي\nكيف ممكن أساعدك اليوم؟',
       isUser: false,
       timestamp: '10:00 AM',
     },
@@ -72,7 +73,7 @@ export default function ChatScreen() {
           <View style={[styles.bubbleRow, item.isUser ? styles.userRow : styles.aiRow]}>
             {!item.isUser && (
               <View style={styles.aiAvatar}>
-                <Text style={styles.aiAvatarText}>🌿</Text>
+                <Ionicons name="leaf" size={14} color={colors.primary} />
               </View>
             )}
             <View style={[styles.bubble, item.isUser ? styles.userBubble : styles.aiBubble]}>
@@ -102,7 +103,7 @@ export default function ChatScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.inputBar}>
           <TouchableOpacity style={styles.micBtn}>
-            <Text style={styles.micIcon}>🎤</Text>
+            <Ionicons name="mic-outline" size={20} color={colors.textPrimary} />
           </TouchableOpacity>
           <TextInput
             style={styles.input}
@@ -113,7 +114,7 @@ export default function ChatScreen() {
             textAlign="right"
           />
           <TouchableOpacity style={styles.sendBtn} onPress={() => input.trim() && sendMessage(input.trim())}>
-            <Text style={styles.sendIcon}>➤</Text>
+            <Ionicons name="send" size={18} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

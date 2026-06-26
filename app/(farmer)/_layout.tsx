@@ -1,18 +1,20 @@
 import React from 'react';
+import { Platform, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
-import { Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../constants/colors';
 
-function TabIcon({ name, focused }: { name: string; focused: boolean }) {
-  const icons: Record<string, string> = {
-    index: '🏠',
-    products: '📦',
-    orders: '🛍️',
-    earnings: '💰',
-    profile: '👤',
-  };
-  return <Text style={[styles.icon, focused && styles.iconActive]}>{icons[name] || '●'}</Text>;
-}
+type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
+
+const farmerTabs: { name: string; title: string; icon: IoniconsName; iconFocused: IoniconsName }[] = [
+  { name: 'index', title: 'الرئيسية', icon: 'home-outline', iconFocused: 'home' },
+  { name: 'products', title: 'منتجاتي', icon: 'cube-outline', iconFocused: 'cube' },
+  { name: 'orders', title: 'طلباتي', icon: 'bag-outline', iconFocused: 'bag' },
+  { name: 'earnings', title: 'أرباحي', icon: 'wallet-outline', iconFocused: 'wallet' },
+  { name: 'profile', title: 'حسابي', icon: 'person-outline', iconFocused: 'person' },
+];
+
+const hiddenScreens = ['add-product', 'flash-deal', 'analytics', 'alerts'];
 
 export default function FarmerLayout() {
   return (
@@ -25,45 +27,29 @@ export default function FarmerLayout() {
         tabBarLabelStyle: styles.tabLabel,
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'الرئيسية',
-          tabBarIcon: ({ focused }) => <TabIcon name="index" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="products"
-        options={{
-          title: 'منتجاتي',
-          tabBarIcon: ({ focused }) => <TabIcon name="products" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="orders"
-        options={{
-          title: 'طلباتي',
-          tabBarIcon: ({ focused }) => <TabIcon name="orders" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="earnings"
-        options={{
-          title: 'أرباحي',
-          tabBarIcon: ({ focused }) => <TabIcon name="earnings" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'حسابي',
-          tabBarIcon: ({ focused }) => <TabIcon name="profile" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen name="add-product" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="flash-deal" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="analytics" options={{ href: null, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="alerts" options={{ href: null, tabBarStyle: { display: 'none' } }} />
+      {farmerTabs.map((tab) => (
+        <Tabs.Screen
+          key={tab.name}
+          name={tab.name}
+          options={{
+            title: tab.title,
+            tabBarIcon: ({ focused, color }) => (
+              <Ionicons
+                name={focused ? tab.iconFocused : tab.icon}
+                size={24}
+                color={color}
+              />
+            ),
+          }}
+        />
+      ))}
+      {hiddenScreens.map((name) => (
+        <Tabs.Screen
+          key={name}
+          name={name}
+          options={{ href: null, tabBarStyle: { display: 'none' } }}
+        />
+      ))}
     </Tabs>
   );
 }
@@ -71,20 +57,19 @@ export default function FarmerLayout() {
 const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    height: 65,
-    paddingBottom: 8,
-    paddingTop: 4,
+    borderTopWidth: 0,
+    height: Platform.OS === 'ios' ? 85 : 70,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 10,
+    paddingTop: 8,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
   },
   tabLabel: {
     fontFamily: 'Cairo_600SemiBold',
     fontSize: 11,
-  },
-  icon: {
-    fontSize: 22,
-  },
-  iconActive: {
-    fontSize: 24,
+    marginTop: 2,
   },
 });

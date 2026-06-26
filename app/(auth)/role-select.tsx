@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../../components/ui/Button';
@@ -28,7 +29,7 @@ export default function RoleSelectScreen() {
           onPress={() => setSelected('buyer')}
           activeOpacity={0.8}
         >
-          <Text style={styles.emoji}>🛒</Text>
+          <Ionicons name="cart-outline" size={40} color={colors.primary} style={styles.emoji} />
           <Text style={styles.cardTitle}>مستهلك</Text>
           <Text style={styles.cardSubtitle}>أريد شراء خضار طازج</Text>
         </TouchableOpacity>
@@ -38,7 +39,7 @@ export default function RoleSelectScreen() {
           onPress={() => setSelected('farmer')}
           activeOpacity={0.8}
         >
-          <Text style={styles.emoji}>🌾</Text>
+          <Ionicons name="leaf-outline" size={40} color={colors.primary} style={styles.emoji} />
           <Text style={styles.cardTitle}>مزارع</Text>
           <Text style={styles.cardSubtitle}>أريد بيع منتجاتي مباشرة</Text>
         </TouchableOpacity>

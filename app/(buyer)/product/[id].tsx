@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -41,11 +42,11 @@ export default function ProductDetailScreen() {
           <SafeAreaView style={styles.imageOverlay}>
             <View style={styles.imageTopRow}>
               <View style={styles.imageActions}>
-                <TouchableOpacity style={styles.iconCircle}><Text>♡</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.iconCircle}><Text>↗</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.iconCircle}><Ionicons name="heart-outline" size={20} color={colors.textPrimary} /></TouchableOpacity>
+                <TouchableOpacity style={styles.iconCircle}><Ionicons name="share-outline" size={20} color={colors.textPrimary} /></TouchableOpacity>
               </View>
               <TouchableOpacity style={styles.iconCircle} onPress={() => router.back()}>
-                <Text style={styles.backArrow}>→</Text>
+                <Ionicons name="arrow-forward" size={18} color={colors.textPrimary} />
               </TouchableOpacity>
             </View>
           </SafeAreaView>
@@ -56,8 +57,8 @@ export default function ProductDetailScreen() {
         <View style={styles.contentCard}>
           {/* Tags Row */}
           <View style={styles.tagsRow}>
-            {product.isFresh && <Badge label="قُطف اليوم ✨" variant="fresh" />}
-            {product.isOrganic && <Badge label="عضوي 🌿" variant="organic" />}
+            {product.isFresh && <Badge label="قُطف اليوم" variant="fresh" />}
+            {product.isOrganic && <Badge label="عضوي" variant="organic" />}
             <Badge label="فلسطيني المنشأ 🇵🇸" variant="status" />
           </View>
 
@@ -100,16 +101,16 @@ export default function ProductDetailScreen() {
               <Text style={styles.farmerName}>{product.farmerName}</Text>
               <RatingStars rating={product.rating} reviewCount={product.reviewCount} size={12} />
             </View>
-            <Text style={styles.mapLink}>المزرعة على الخريطة 🗺</Text>
+            <Text style={styles.mapLink}>المزرعة على الخريطة</Text>
           </TouchableOpacity>
 
           {/* Special Actions */}
           <View style={styles.specialActions}>
             <TouchableOpacity style={styles.specialBtn} onPress={() => router.push('/(buyer)/adopt-tree')}>
-              <Text style={styles.specialBtnText}>تبنّى شجرة 🌳</Text>
+              <Text style={styles.specialBtnText}>تبنّى شجرة</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.specialBtn} onPress={() => router.push('/(buyer)/pick-your-own')}>
-              <Text style={styles.specialBtnText}>اجي قطف بنفسك ✂️</Text>
+              <Text style={styles.specialBtnText}>اجي قطف بنفسك</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -117,7 +118,7 @@ export default function ProductDetailScreen() {
 
       {/* Bottom Bar */}
       <View style={styles.bottomBar}>
-        <Button title="أضف للسلة 🛒" onPress={handleAddToCart} size="lg" style={{ flex: 1 }} />
+        <Button title="أضف للسلة" onPress={handleAddToCart} size="lg" style={{ flex: 1 }} />
         <QuantityStepper
           value={quantity}
           onIncrement={() => setQuantity(quantity + 1)}

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Avatar from '../../components/ui/Avatar';
@@ -21,7 +22,7 @@ export default function MapScreen() {
     <View style={styles.container}>
       {/* Map Placeholder */}
       <View style={styles.mapPlaceholder}>
-        <Text style={styles.mapEmoji}>🗺</Text>
+        <Ionicons name="map-outline" size={60} color={colors.primary} />
         <Text style={styles.mapText}>خريطة تفاعلية</Text>
         <Text style={styles.mapSubtext}>سيتم عرض مواقع المزارعين هنا</Text>
 
@@ -32,7 +33,7 @@ export default function MapScreen() {
             style={[styles.marker, { top: 150 + i * 80, left: 80 + i * 100 }]}
             onPress={() => setSelectedFarmer(farmer)}
           >
-            <Text style={styles.markerIcon}>📍</Text>
+            <Ionicons name="location" size={28} color={colors.primary} />
             <Text style={styles.markerLabel}>{farmer.name.substring(0, 10)}</Text>
           </TouchableOpacity>
         ))}
@@ -42,10 +43,13 @@ export default function MapScreen() {
       <SafeAreaView style={styles.topControls}>
         <View style={styles.topRow}>
           <TouchableOpacity style={styles.backCircle} onPress={() => router.back()}>
-            <Text style={styles.backArrow}>→</Text>
+            <Ionicons name="arrow-forward" size={20} color={colors.textPrimary} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.locationBtn}>
-            <Text style={styles.locationText}>📍 موقعي</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={styles.locationText}>موقعي</Text>
+              <Ionicons name="navigate-outline" size={16} color={colors.primary} />
+            </View>
           </TouchableOpacity>
         </View>
         <CategoryFilter categories={categories} selected={selectedCategory} onSelect={setSelectedCategory} />
@@ -59,7 +63,10 @@ export default function MapScreen() {
           <View style={styles.farmerDetails}>
             <Text style={styles.farmerName}>{selectedFarmer.name}</Text>
             <RatingStars rating={selectedFarmer.rating} reviewCount={selectedFarmer.reviewCount} />
-            <Text style={styles.distance}>📍 {selectedFarmer.distance} كم</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={styles.distance}>{selectedFarmer.distance} كم</Text>
+              <Ionicons name="location-outline" size={14} color={colors.textMuted} />
+            </View>
           </View>
         </View>
         <Button title="طلب الآن" onPress={() => router.push(`/(buyer)/farmer/${selectedFarmer.id}`)} fullWidth />

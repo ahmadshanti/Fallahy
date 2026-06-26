@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import OrderStatusStep from '../../../components/buyer/OrderStatusStep';
@@ -24,7 +25,7 @@ export default function OrderTrackingScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.replace('/(buyer)/orders')}>
-          <Text style={styles.backIcon}>→</Text>
+          <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>تتبع الطلب</Text>
         <View style={{ width: 24 }} />
@@ -61,7 +62,7 @@ export default function OrderTrackingScreen() {
         {/* Map Card */}
         <View style={styles.mapCard}>
           <View style={styles.mapPlaceholder}>
-            <Text style={styles.mapEmoji}>🗺</Text>
+            <Ionicons name="map-outline" size={40} color={colors.primary} />
             <Text style={styles.mapText}>تتبع الموقع على الخريطة</Text>
           </View>
           <View style={styles.distanceChip}>
@@ -71,9 +72,9 @@ export default function OrderTrackingScreen() {
 
         {/* Contact Buttons */}
         <View style={styles.contactSection}>
-          <Button title="اتصل بالمزارع 📞" onPress={() => {}} fullWidth />
+          <Button title="اتصل بالمزارع" onPress={() => {}} fullWidth icon={<Ionicons name="call-outline" size={18} color="#FFFFFF" />} />
           <View style={{ height: spacing.sm }} />
-          <Button title="واتساب 💬" onPress={() => {}} variant="outlined" fullWidth />
+          <Button title="واتساب" onPress={() => {}} variant="outlined" fullWidth icon={<Ionicons name="logo-whatsapp" size={18} color={colors.primary} />} />
         </View>
 
         {/* Order Summary */}

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
@@ -41,11 +42,11 @@ export default function ExploreScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backIcon}>→</Text>
+          <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>تصفح المنتجات</Text>
         <TouchableOpacity>
-          <Text style={styles.filterIcon}>⚙️</Text>
+          <Ionicons name="options-outline" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
       </View>
 
@@ -60,7 +61,7 @@ export default function ExploreScreen() {
           autoFocus
           textAlign="right"
         />
-        <Text style={styles.searchIcon}>🔍</Text>
+        <Ionicons name="search-outline" size={20} color={colors.textMuted} />
       </View>
 
       {/* Categories */}
@@ -119,7 +120,7 @@ export default function ExploreScreen() {
           )}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyEmoji}>🔍</Text>
+              <Ionicons name="search-outline" size={48} color={colors.textMuted} />
               <Text style={styles.emptyText}>لا توجد منتجات مطابقة</Text>
             </View>
           }

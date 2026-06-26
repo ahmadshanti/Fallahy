@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
@@ -74,7 +75,7 @@ export default function OrdersScreen() {
           )}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyEmoji}>📦</Text>
+              <Ionicons name="cube-outline" size={60} color={colors.textMuted} />
               <Text style={styles.emptyTitle}>لا توجد طلبات</Text>
               <Text style={styles.emptySubtitle}>ابدأ بطلب خضار طازجة!</Text>
             </View>

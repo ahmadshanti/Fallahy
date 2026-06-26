@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
@@ -45,7 +46,7 @@ export default function FarmerProductsScreen() {
           )}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyEmoji}>📦</Text>
+              <Ionicons name="cube-outline" size={60} color={colors.textMuted} />
               <Text style={styles.emptyText}>لم تضف أي منتج بعد</Text>
               <Button title="أضف منتجك الأول" onPress={() => router.push('/(farmer)/add-product')} />
             </View>

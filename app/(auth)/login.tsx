@@ -4,6 +4,7 @@ import {
   ScrollView, KeyboardAvoidingView, Platform, Keyboard,
   TouchableWithoutFeedback, Modal, FlatList,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../../components/ui/Button';
@@ -97,7 +98,7 @@ export default function LoginScreen() {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.content}>
-              <Text style={styles.logo}>🌿</Text>
+              <Ionicons name="leaf" size={48} color={colors.primary} style={styles.logo} />
               <Text style={styles.title}>مرحباً بك</Text>
 
               <View style={styles.phoneRow}>

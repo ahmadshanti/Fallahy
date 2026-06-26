@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 import { Alert } from '../../types';
@@ -10,9 +11,9 @@ interface AlertCardProps {
 }
 
 const typeStyles = {
-  warning: { bg: '#FFF8E7', border: colors.secondary, icon: '⚠️' },
-  info: { bg: '#F0F7E8', border: colors.success, icon: '📉' },
-  success: { bg: '#E8F5E1', border: colors.success, icon: '✅' },
+  warning: { bg: '#FFF8E7', border: colors.secondary, icon: 'warning-outline' },
+  info: { bg: '#F0F7E8', border: colors.success, icon: 'trending-down-outline' },
+  success: { bg: '#E8F5E1', border: colors.success, icon: 'checkmark-circle-outline' },
 };
 
 export default function AlertCard({ alert, onAction }: AlertCardProps) {
@@ -21,7 +22,7 @@ export default function AlertCard({ alert, onAction }: AlertCardProps) {
   return (
     <View style={[styles.card, { backgroundColor: style.bg, borderLeftColor: style.border }]}>
       <View style={styles.row}>
-        <Text style={styles.icon}>{style.icon}</Text>
+        <Ionicons name={style.icon as any} size={18} color={style.border} />
         <Text style={styles.message}>{alert.message}</Text>
       </View>
       <TouchableOpacity onPress={onAction}>

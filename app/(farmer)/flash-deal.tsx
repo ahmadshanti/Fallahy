@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Input from '../../components/ui/Input';
@@ -23,7 +24,7 @@ export default function FlashDealScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.successContainer}>
-          <Text style={styles.successEmoji}>🎉</Text>
+          <Ionicons name="checkmark-circle" size={80} color={colors.primary} />
           <Text style={styles.successTitle}>تم نشر العرض بنجاح!</Text>
           <Text style={styles.successSubtitle}>
             عرض {selectedProduct.name} بسعر ₪{dealPrice} لمدة {duration}
@@ -38,9 +39,9 @@ export default function FlashDealScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backIcon}>→</Text>
+          <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>عرض سريع ⚡</Text>
+        <Text style={styles.headerTitle}>عرض سريع</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -88,7 +89,7 @@ export default function FlashDealScreen() {
         <Text style={styles.label}>معاينة العرض</Text>
         <View style={styles.previewCard}>
           <View style={styles.previewHeader}>
-            <Badge label="⚡ عرض سريع" variant="savings" />
+            <Badge label="عرض سريع" variant="savings" />
             <Text style={styles.previewName}>{selectedProduct.name}</Text>
           </View>
           <View style={styles.previewPriceRow}>

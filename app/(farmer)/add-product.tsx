@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -68,7 +69,7 @@ export default function AddProductScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backIcon}>→</Text>
+          <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>إضافة منتج</Text>
         <View style={{ width: 24 }} />
@@ -159,7 +160,7 @@ export default function AddProductScreen() {
         <View style={styles.voiceSection}>
           <TouchableOpacity onPress={handleVoice}>
             <Animated.View style={[styles.micButton, isRecording && styles.micRecording, { transform: [{ scale: pulseScale }] }]}>
-              <Text style={styles.micIcon}>🎤</Text>
+              <Ionicons name="mic" size={28} color="#FFFFFF" />
             </Animated.View>
           </TouchableOpacity>
           <Text style={styles.voiceLabel}>

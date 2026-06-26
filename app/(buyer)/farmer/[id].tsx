@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -35,7 +36,7 @@ export default function FarmerProfileScreen() {
           <LinearGradient colors={['transparent', 'rgba(0,0,0,0.7)']} style={StyleSheet.absoluteFillObject} />
           <SafeAreaView style={styles.heroOverlay}>
             <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-              <Text style={styles.backArrow}>→</Text>
+              <Ionicons name="arrow-forward" size={18} color={colors.textPrimary} />
             </TouchableOpacity>
           </SafeAreaView>
           <View style={styles.heroBottom}>
@@ -81,7 +82,7 @@ export default function FarmerProfileScreen() {
         {/* Map Preview */}
         <TouchableOpacity style={styles.mapPreview} onPress={() => router.push('/(buyer)/map')}>
           <View style={styles.mapPlaceholder}>
-            <Text style={styles.mapIcon}>🗺</Text>
+            <Ionicons name="map-outline" size={40} color={colors.primary} />
             <Text style={styles.mapText}>المزرعة على الخريطة</Text>
           </View>
         </TouchableOpacity>

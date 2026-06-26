@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MetricCard from '../../components/farmer/MetricCard';
@@ -14,7 +15,7 @@ export default function AnalyticsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backIcon}>→</Text>
+          <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>التحليلات</Text>
         <View style={{ width: 24 }} />
@@ -22,9 +23,9 @@ export default function AnalyticsScreen() {
 
       <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 40 }}>
         <View style={styles.metricsRow}>
-          <MetricCard icon="👁" value="1,250" label="مشاهدات" />
-          <MetricCard icon="🛒" value="89" label="طلبات" />
-          <MetricCard icon="⭐" value="4.8" label="تقييم" />
+          <MetricCard icon="eye-outline" value="1,250" label="مشاهدات" />
+          <MetricCard icon="cart-outline" value="89" label="طلبات" />
+          <MetricCard icon="star-outline" value="4.8" label="تقييم" />
         </View>
 
         <View style={styles.chartCard}>

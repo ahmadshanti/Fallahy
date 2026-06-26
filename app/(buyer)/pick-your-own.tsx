@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -27,9 +28,9 @@ export default function PickYourOwnScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backIcon}>→</Text>
+          <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>اقطف بنفسك ✂️</Text>
+        <Text style={styles.headerTitle}>اقطف بنفسك</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -43,7 +44,10 @@ export default function PickYourOwnScreen() {
             <Image source={{ uri: farm.image }} style={styles.farmImage} contentFit="cover" />
             <View style={styles.farmInfo}>
               <Text style={styles.farmName}>{farm.name}</Text>
-              <Text style={styles.farmLocation}>📍 {farm.location} - {farm.distance}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 4 }}>
+                <Text style={[styles.farmLocation, { marginTop: 0 }]}>{farm.location} - {farm.distance}</Text>
+                <Ionicons name="location-outline" size={14} color={colors.textMuted} />
+              </View>
               <Text style={styles.farmCrops}>المحاصيل: {farm.crops.join('، ')}</Text>
               <View style={styles.farmBottom}>
                 <Button title="احجز زيارة" onPress={() => {}} size="sm" />

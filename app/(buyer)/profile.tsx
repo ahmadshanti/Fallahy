@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Avatar from '../../components/ui/Avatar';
@@ -10,11 +11,11 @@ import { mockSavings } from '../../constants/mockData';
 import { useAuthStore } from '../../store/authStore';
 
 const menuItems = [
-  { label: 'عناويني', icon: '📍' },
-  { label: 'تنبيهات الأسعار', icon: '🔔' },
-  { label: 'حساب العائلة', icon: '👨‍👩‍👧‍👦' },
-  { label: 'اللغة', icon: '🌐' },
-  { label: 'الإعدادات', icon: '⚙️' },
+  { label: 'عناويني', icon: 'location-outline' as const },
+  { label: 'تنبيهات الأسعار', icon: 'notifications-outline' as const },
+  { label: 'حساب العائلة', icon: 'people-outline' as const },
+  { label: 'اللغة', icon: 'globe-outline' as const },
+  { label: 'الإعدادات', icon: 'settings-outline' as const },
 ];
 
 export default function ProfileScreen() {
@@ -35,7 +36,7 @@ export default function ProfileScreen() {
         <View style={styles.profileHeader}>
           <Avatar uri="https://i.pravatar.cc/100?img=33" size={80} />
           <Text style={styles.userName}>{user?.name || 'أحمد محمد'}</Text>
-          <Badge label={`${mockSavings.rank} 🌿`} variant="verified" />
+          <Badge label={`${mockSavings.rank}`} variant="verified" />
         </View>
 
         {/* Rank Progress */}
@@ -77,18 +78,18 @@ export default function ProfileScreen() {
         <View style={styles.menu}>
           {menuItems.map((item) => (
             <TouchableOpacity key={item.label} style={styles.menuItem}>
-              <Text style={styles.menuChevron}>‹</Text>
+              <Ionicons name="chevron-back" size={20} color={colors.textMuted} />
               <View style={styles.menuContent}>
                 <Text style={styles.menuLabel}>{item.label}</Text>
-                <Text style={styles.menuIcon}>{item.icon}</Text>
+                <Ionicons name={item.icon} size={20} color={colors.textPrimary} />
               </View>
             </TouchableOpacity>
           ))}
           <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
-            <Text style={styles.menuChevron}>‹</Text>
+            <Ionicons name="chevron-back" size={20} color={colors.textMuted} />
             <View style={styles.menuContent}>
               <Text style={[styles.menuLabel, styles.logoutText]}>تسجيل الخروج</Text>
-              <Text style={styles.menuIcon}>🚪</Text>
+              <Ionicons name="log-out-outline" size={20} color={colors.error} />
             </View>
           </TouchableOpacity>
         </View>

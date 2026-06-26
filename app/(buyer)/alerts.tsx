@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
@@ -18,7 +19,7 @@ export default function AlertsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backIcon}>→</Text>
+          <Ionicons name="arrow-forward" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>تنبيهات الأسعار</Text>
         <View style={{ width: 24 }} />
@@ -29,7 +30,7 @@ export default function AlertsScreen() {
           <View key={alert.id} style={styles.alertCard}>
             <View style={styles.alertRow}>
               <Text style={styles.alertProduct}>{alert.product}</Text>
-              <Text style={styles.alertIcon}>🔔</Text>
+              <Ionicons name="notifications-outline" size={20} color={colors.secondary} />
             </View>
             <View style={styles.priceRow}>
               <Text style={styles.priceLabel}>السعر الحالي: ₪{alert.currentPrice}</Text>

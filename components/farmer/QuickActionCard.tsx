@@ -1,5 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../constants/colors';
 import { radius, shadow, spacing } from '../../constants/spacing';
 
@@ -17,7 +18,7 @@ export default function QuickActionCard({ icon, label, onPress, isPrimary = fals
       onPress={onPress}
       activeOpacity={0.8}
     >
-      <Text style={styles.icon}>{icon}</Text>
+      <Ionicons name={icon as any} size={28} color={isPrimary ? '#FFFFFF' : colors.primary} />
       <Text style={[styles.label, isPrimary ? styles.labelPrimary : styles.labelSecondary]}>
         {label}
       </Text>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import HeroBanner from '../../components/buyer/HeroBanner';
@@ -24,12 +25,12 @@ export default function BuyerHomeScreen() {
         {/* Top Bar */}
         <View style={styles.topBar}>
           <View style={styles.topBarRight}>
-            <Text style={styles.locationIcon}>📍</Text>
+            <Ionicons name="location-outline" size={18} color={colors.primary} />
             <Text style={styles.locationText}>رام الله، فلسطين</Text>
           </View>
           <View style={styles.topBarLeft}>
             <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/(buyer)/cart')}>
-              <Text style={styles.iconText}>🛒</Text>
+              <Ionicons name="cart-outline" size={22} color={colors.textPrimary} />
               {cartItems.length > 0 && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>{cartItems.length}</Text>
@@ -37,7 +38,7 @@ export default function BuyerHomeScreen() {
               )}
             </TouchableOpacity>
             <TouchableOpacity style={styles.iconBtn}>
-              <Text style={styles.iconText}>🔔</Text>
+              <Ionicons name="notifications-outline" size={22} color={colors.textPrimary} />
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>3</Text>
               </View>
@@ -47,9 +48,9 @@ export default function BuyerHomeScreen() {
 
         {/* Search Bar */}
         <TouchableOpacity style={styles.searchBar} onPress={() => router.push('/(buyer)/explore')}>
-          <Text style={styles.searchIcon}>🎤</Text>
+          <Ionicons name="mic-outline" size={20} color={colors.primary} />
           <Text style={styles.searchPlaceholder}>ابحث عن خضار، فواكه أو مزارعين...</Text>
-          <Text style={styles.searchIconLeft}>🔍</Text>
+          <Ionicons name="search-outline" size={20} color={colors.textMuted} />
         </TouchableOpacity>
 
         {/* Hero Banner */}
@@ -64,13 +65,13 @@ export default function BuyerHomeScreen() {
 
         {/* Savings Banner */}
         <TouchableOpacity style={styles.savingsBanner} onPress={() => router.push('/(buyer)/profile')}>
-          <Text style={styles.savingsChevron}>‹</Text>
+          <Ionicons name="chevron-back" size={20} color="rgba(255,255,255,0.5)" />
           <View style={styles.savingsContent}>
             <Text style={styles.savingsTitle}>وفّرت {mockSavings.thisMonth} شيكل هاد الشهر</Text>
             <Text style={styles.savingsSubtitle}>أنت بطل الاقتصاد الزراعي!</Text>
           </View>
           <View style={styles.savingsIcon}>
-            <Text style={styles.savingsIconText}>🛒</Text>
+            <Ionicons name="cart-outline" size={20} color="#FFFFFF" />
           </View>
         </TouchableOpacity>
 

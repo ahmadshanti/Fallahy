@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Avatar from '../../components/ui/Avatar';
@@ -21,7 +22,7 @@ export default function FarmerDashboard() {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity>
-            <Text style={styles.bellIcon}>🔔</Text>
+            <Ionicons name="notifications-outline" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
           <View style={styles.headerRight}>
             <View style={styles.headerText}>
@@ -34,9 +35,9 @@ export default function FarmerDashboard() {
 
         {/* Metrics */}
         <View style={styles.metricsRow}>
-          <MetricCard icon="📦" value="8" label="الطلبات اليوم" />
-          <MetricCard icon="💰" value="240 ₪" label="المبيعات" />
-          <MetricCard icon="⭐" value="4.8" label="التقييم" />
+          <MetricCard icon="cube-outline" value="8" label="الطلبات اليوم" />
+          <MetricCard icon="wallet-outline" value="240 ₪" label="المبيعات" />
+          <MetricCard icon="star-outline" value="4.8" label="التقييم" />
         </View>
 
         {/* Smart Alerts */}
@@ -56,25 +57,25 @@ export default function FarmerDashboard() {
         <View style={styles.actionsGrid}>
           <View style={styles.actionsRow}>
             <QuickActionCard
-              icon="➕"
+              icon="add-circle-outline"
               label="إضافة منتج"
               onPress={() => router.push('/(farmer)/add-product')}
               isPrimary
             />
             <QuickActionCard
-              icon="📋"
+              icon="clipboard-outline"
               label="طلباتي"
               onPress={() => router.push('/(farmer)/orders')}
             />
           </View>
           <View style={styles.actionsRow}>
             <QuickActionCard
-              icon="💰"
+              icon="wallet-outline"
               label="أرباحي"
               onPress={() => router.push('/(farmer)/earnings')}
             />
             <QuickActionCard
-              icon="⚡"
+              icon="flash-outline"
               label="عرض سريع"
               onPress={() => router.push('/(farmer)/flash-deal')}
             />
