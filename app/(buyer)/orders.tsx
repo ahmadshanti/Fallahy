@@ -131,10 +131,10 @@ export default function OrdersScreen() {
       </View>
 
       {/* Filter Tabs */}
-      <FlatList
-        data={FILTER_TABS}
-        renderItem={({ item }) => (
+      <View style={styles.filterRow}>
+        {FILTER_TABS.map((item) => (
           <TouchableOpacity
+            key={item.key}
             style={[styles.filterTab, activeFilter === item.key && styles.filterTabActive]}
             onPress={() => setActiveFilter(item.key)}
           >
@@ -147,13 +147,8 @@ export default function OrdersScreen() {
               {item.label}
             </Text>
           </TouchableOpacity>
-        )}
-        keyExtractor={(item) => item.key}
-        horizontal
-        inverted
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterRow}
-      />
+        ))}
+      </View>
 
       {/* Orders List */}
       {loading ? (
@@ -207,7 +202,8 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
   filterRow: {
-    paddingHorizontal: 12,
+    flexDirection: 'row-reverse',
+    paddingHorizontal: 16,
     gap: 8,
     paddingBottom: 12,
   },

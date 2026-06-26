@@ -205,10 +205,10 @@ export default function ExploreScreen() {
       </View>
 
       {/* Category Chips */}
-      <FlatList
-        data={CATEGORIES}
-        renderItem={({ item }) => (
+      <View style={styles.categoriesRow}>
+        {CATEGORIES.map((item) => (
           <TouchableOpacity
+            key={item.key}
             style={[
               styles.categoryChip,
               selectedCategory === item.key && styles.categoryChipActive,
@@ -224,13 +224,8 @@ export default function ExploreScreen() {
               {item.label}
             </Text>
           </TouchableOpacity>
-        )}
-        keyExtractor={(item) => item.key}
-        horizontal
-        inverted
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.categoriesRow}
-      />
+        ))}
+      </View>
 
       {/* Products Grid */}
       {loading ? (
@@ -346,13 +341,15 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   categoriesRow: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     gap: 8,
   },
   categoryChip: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderRadius: 20,
     backgroundColor: colors.surface,
     borderWidth: 1,

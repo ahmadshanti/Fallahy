@@ -16,7 +16,7 @@ export default function RoleSelectScreen() {
         <View style={styles.iconContainer}>
           <Ionicons name="leaf" size={60} color={colors.primary} />
         </View>
-        <Text style={styles.title}>أهلاً بك في فلاحي</Text>
+        <Text style={styles.title}>أهلاً بك في من الأرض</Text>
         <Text style={styles.subtitle}>من الأرض لبيتك مباشرة</Text>
       </View>
 

@@ -1,18 +1,18 @@
 {
   "expo": {
-    "name": "fallahy",
-    "slug": "fallahy",
+    "name": "من الأرض",
+    "slug": "min-elard",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "scheme": "fallahy",
+    "scheme": "minelard",
     "extra": {
       "direction": "rtl"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.fallahy.app"
+      "bundleIdentifier": "com.minelard.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -20,7 +20,7 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png"
       },
-      "package": "com.fallahy.app"
+      "package": "com.minelard.app"
     },
     "web": {
       "favicon": "./assets/favicon.png",

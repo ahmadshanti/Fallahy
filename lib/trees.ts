@@ -46,9 +46,11 @@ export async function adoptTree(treeId: string, buyerId: string, customName: str
     .single();
   if (error) throw error;
 
-  await supabase.rpc('decrement_tree_count', { tree_id_param: treeId }).catch(() => {
-    supabase.from('trees').update({ available_count: 0 }).eq('id', treeId);
-  });
+  // Decrement available count
+  const { data: tree } = await supabase.from('trees').select('available_count').eq('id', treeId).single();
+  if (tree) {
+    await supabase.from('trees').update({ available_count: Math.max(0, (tree.available_count || 1) - 1) }).eq('id', treeId);
+  }
 
   return data;
 }

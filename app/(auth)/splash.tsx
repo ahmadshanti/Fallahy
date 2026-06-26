@@ -29,8 +29,8 @@ export default function SplashScreen() {
             fill="#98C27B"
           />
         </Svg>
-        <Text style={styles.title}>الفلاحي</Text>
-        <Text style={styles.subtitle}>من الأرض لبيتك مباشرة</Text>
+        <Text style={styles.title}>من الأرض</Text>
+        <Text style={styles.subtitle}>From The Land</Text>
       </Animated.View>
     </View>
   );

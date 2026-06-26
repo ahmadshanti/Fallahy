@@ -90,14 +90,18 @@ export default function FarmerTreesScreen() {
     try {
       let imageUrl: string | null = null;
       if (imageUri) {
-        const fileExt = imageUri.split('.').pop()?.split('?')[0] || 'jpg';
-        const fileName = `${farmerId}/${Date.now()}.${fileExt}`;
-        const formData = new FormData();
-        formData.append('file', { uri: imageUri, name: `tree.${fileExt}`, type: `image/${fileExt}` } as any);
-        const { error: uploadError } = await supabase.storage.from('tree-images').upload(fileName, formData, { upsert: true });
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage.from('tree-images').getPublicUrl(fileName);
-          imageUrl = urlData.publicUrl;
+        try {
+          const fileExt = imageUri.split('.').pop()?.split('?')[0] || 'jpg';
+          const fileName = `${farmerId}/${Date.now()}.${fileExt}`;
+          const formData = new FormData();
+          formData.append('file', { uri: imageUri, name: `tree.${fileExt}`, type: `image/${fileExt}` } as any);
+          const { error: uploadError } = await supabase.storage.from('tree-images').upload(fileName, formData, { upsert: true });
+          if (!uploadError) {
+            const { data: urlData } = supabase.storage.from('tree-images').getPublicUrl(fileName);
+            imageUrl = urlData.publicUrl;
+          }
+        } catch (imgErr) {
+          console.log('Image upload skipped:', imgErr);
         }
       }
 
@@ -114,7 +118,7 @@ export default function FarmerTreesScreen() {
         extra_info: extraInfo || null,
       });
 
-      Alert.alert('', 'تم إضافة الشجرة بنجاح');
+      Alert.alert('تم', 'تم إضافة الشجرة بنجاح');
       resetForm();
       setShowForm(false);
       loadTrees();

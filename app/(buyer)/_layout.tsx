@@ -26,6 +26,8 @@ const hiddenScreens = [
   'chat-thread/[id]',
   'adopt-tree',
   'alerts',
+  'address',
+  'settings',
 ];
 
 export default function BuyerLayout() {

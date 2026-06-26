@@ -64,7 +64,7 @@ export default function ProfileScreen() {
         style: 'destructive',
         onPress: async () => {
           await logout();
-          router.replace('/');
+          router.replace('/(auth)/splash');
         },
       },
     ]);
@@ -79,17 +79,17 @@ export default function ProfileScreen() {
     {
       icon: 'location-outline' as const,
       label: 'عناويني',
-      onPress: () => Alert.alert('قريبا', 'هذه الخاصية قيد التطوير'),
+      onPress: () => router.push('/(buyer)/address'),
     },
     {
       icon: 'settings-outline' as const,
       label: 'الإعدادات',
-      onPress: () => Alert.alert('قريبا', 'هذه الخاصية قيد التطوير'),
+      onPress: () => router.push('/(buyer)/settings'),
     },
     {
       icon: 'help-circle-outline' as const,
       label: 'المساعدة',
-      onPress: () => Alert.alert('قريبا', 'هذه الخاصية قيد التطوير'),
+      onPress: () => router.push('/(buyer)/chat'),
     },
   ];
 

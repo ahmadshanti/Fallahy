@@ -96,9 +96,9 @@ export default function CheckoutScreen() {
 
       clear();
       router.replace(`/(buyer)/order-tracking/${order.id}`);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Checkout error:', err);
-      Alert.alert('خطأ', 'تعذر إنشاء الطلب. حاول مرة أخرى.');
+      Alert.alert('خطأ', err?.message || 'تعذر إنشاء الطلب. حاول مرة أخرى.');
     } finally {
       setSubmitting(false);
     }

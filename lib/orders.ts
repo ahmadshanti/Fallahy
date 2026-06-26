@@ -27,7 +27,7 @@ export async function createOrder(orderData: {
 export async function getOrdersByBuyer(buyerId: string) {
   const { data, error } = await supabase
     .from('orders')
-    .select('*, order_items(*, products(name, image_url)), farmers(farm_name, owner_avatar_url, whatsapp_number)')
+    .select('*, order_items(*, products(name, image_url)), farmers(id, farm_name, owner_avatar_url, whatsapp_number)')
     .eq('buyer_id', buyerId)
     .order('created_at', { ascending: false });
   if (error) throw error;
@@ -37,7 +37,7 @@ export async function getOrdersByBuyer(buyerId: string) {
 export async function getOrdersByFarmer(farmerId: string) {
   const { data, error } = await supabase
     .from('orders')
-    .select('*, order_items(*, products(name, image_url)), users!buyer_id(full_name, avatar_url, phone)')
+    .select('*, order_items(*, products(name, image_url))')
     .eq('farmer_id', farmerId)
     .order('created_at', { ascending: false });
   if (error) throw error;
@@ -47,7 +47,7 @@ export async function getOrdersByFarmer(farmerId: string) {
 export async function getOrderById(id: string) {
   const { data, error } = await supabase
     .from('orders')
-    .select('*, order_items(*, products(name, image_url)), farmers(*, users:user_id(phone)), users!buyer_id(full_name, avatar_url, phone)')
+    .select('*, order_items(*, products(name, image_url)), farmers(farm_name, owner_avatar_url, whatsapp_number, city, location_lat, location_lng)')
     .eq('id', id)
     .single();
   if (error) throw error;

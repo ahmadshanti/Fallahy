@@ -20,7 +20,7 @@ const slides = [
     id: '2',
     iconName: 'leaf-outline' as const,
     title: 'الحل',
-    body: 'فلاحي يربطك مباشرة بالمزارع القريب منك',
+    body: 'من الأرض يربطك مباشرة بالمزارع القريب منك',
   },
   {
     id: '3',

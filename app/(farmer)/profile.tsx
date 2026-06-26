@@ -179,7 +179,7 @@ export default function FarmerProfileScreen() {
     } else if (item.label === 'معلومات المزرعة') {
       setIsEditing(true);
     } else if (item.label === 'المساعدة') {
-      Alert.alert('المساعدة', 'للتواصل مع الدعم:\nsupport@fallahy.app');
+      Alert.alert('المساعدة', 'للتواصل مع الدعم:\nsupport@minelard.app');
     }
   };
 
