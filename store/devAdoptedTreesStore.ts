@@ -28,9 +28,7 @@ export const useDevAdoptedTreesStore = create<DevAdoptedTreesStore>((set, get) =
       status: 'active',
       trees: {
         ...tree,
-        farmers: tree.farmers
-          ? { farm_name: tree.farmers.farm_name, city: tree.farmers.city }
-          : undefined,
+        farmers: tree.farmers as any,
       },
     };
     set({ adopted: [row, ...get().adopted] });
