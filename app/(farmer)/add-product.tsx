@@ -13,6 +13,8 @@ import { useAuthStore } from '../../store/authStore';
 import { addProduct, updateProduct } from '../../lib/products';
 import { supabase } from '../../lib/supabase';
 import { aiServiceConfigured, voiceParseProduct, voiceTranscribe } from '../../lib/aiService';
+import { isDevMode } from '../../lib/devMode';
+import { useDevProductsStore } from '../../store/devProductsStore';
 
 const units = ['كغ', 'ليتر', 'حبة', 'طرد'];
 const saleTypes = ['مفرق', 'جملة', 'كلاهما'];
@@ -21,6 +23,8 @@ export default function AddProductScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const farmerId = useAuthStore((s) => s.farmerId);
+  const addDevProduct = useDevProductsStore((s) => s.addProduct);
+  const updateDevProduct = useDevProductsStore((s) => s.updateProduct);
 
   const isEditing = !!params.editId;
   const editId = params.editId as string;
@@ -229,7 +233,15 @@ export default function AddProductScreen() {
         is_available: true,
       };
 
-      if (isEditing) {
+      if (isDevMode) {
+        // Skip DB write — fake farmer UUID violates products_farmer_id_fkey
+        if (isEditing) {
+          updateDevProduct(editId, productData as any);
+        } else {
+          addDevProduct({ ...(productData as any), id: `dev-${Date.now()}` });
+        }
+        Alert.alert('', isEditing ? 'تم تحديث المنتج بنجاح' : 'تم إضافة المنتج بنجاح');
+      } else if (isEditing) {
         await updateProduct(editId, productData);
         Alert.alert('', 'تم تحديث المنتج بنجاح');
       } else {

@@ -19,6 +19,7 @@ import { getAllTrees, adoptTree, getAdoptedTreesByBuyer } from '../../lib/trees'
 import { Tree, AdoptedTree } from '../../types';
 import { isDevMode } from '../../lib/devMode';
 import { useDevAdoptedTreesStore } from '../../store/devAdoptedTreesStore';
+import { generateTreeImage, replicateConfigured } from '../../lib/replicate';
 
 export default function TreesScreen() {
   const { buyerId } = useAuthStore();
@@ -33,6 +34,13 @@ export default function TreesScreen() {
   const [showModal, setShowModal] = useState(false);
   const [selectedTree, setSelectedTree] = useState<Tree | null>(null);
   const [customName, setCustomName] = useState('');
+
+  // Photo visualizer for adopted trees
+  const [photoTree, setPhotoTree] = useState<AdoptedTree | null>(null);
+  const [photoSeason, setPhotoSeason] = useState<'Spring' | 'Summer' | 'Autumn' | 'Winter'>('Spring');
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoLoading, setPhotoLoading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -149,6 +157,26 @@ export default function TreesScreen() {
     </View>
   );
 
+  const openPhotos = (tree: AdoptedTree, season: 'Spring' | 'Summer' | 'Autumn' | 'Winter' = 'Spring') => {
+    setPhotoTree(tree);
+    setPhotoSeason(season);
+    setPhotoUrl(null);
+    setPhotoError(null);
+    if (!replicateConfigured) {
+      setPhotoError('Replicate غير مهيأ — يتم عرض صورة الشجرة الأصلية');
+      setPhotoUrl(tree.trees?.image_url || null);
+      return;
+    }
+    setPhotoLoading(true);
+    generateTreeImage(tree.trees?.tree_type || tree.custom_name, season)
+      .then((url) => setPhotoUrl(url))
+      .catch((err) => {
+        setPhotoError(err?.message || 'تعذّر توليد الصورة');
+        setPhotoUrl(tree.trees?.image_url || null);
+      })
+      .finally(() => setPhotoLoading(false));
+  };
+
   const renderAdoptedCard = ({ item }: { item: AdoptedTree }) => {
     const statusMap: Record<string, { label: string; color: string }> = {
       active: { label: 'نشطة', color: colors.success },
@@ -158,7 +186,13 @@ export default function TreesScreen() {
     const st = statusMap[item.status] || statusMap.active;
 
     return (
-      <View style={styles.adoptedCard}>
+      <TouchableOpacity
+        style={styles.adoptedCard}
+        onPress={() => openPhotos(item)}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel={`عرض صور ${item.custom_name}`}
+      >
         {item.trees?.image_url ? (
           <Image source={{ uri: item.trees.image_url }} style={styles.adoptedImage} />
         ) : (
@@ -180,8 +214,12 @@ export default function TreesScreen() {
           <Text style={styles.adoptedDate}>
             تاريخ التبني: {new Date(item.adopted_at).toLocaleDateString('ar')}
           </Text>
+          <View style={styles.viewPhotosHint}>
+            <Ionicons name="sparkles" size={12} color="#7C3AED" />
+            <Text style={styles.viewPhotosHintText}>اضغط لعرض الصور بالذكاء الاصطناعي</Text>
+          </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -286,6 +324,72 @@ export default function TreesScreen() {
                 <Text style={styles.modalConfirmText}>تأكيد التبني</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* AI Photo Visualizer Modal for adopted trees */}
+      <Modal visible={!!photoTree} transparent animationType="slide" onRequestClose={() => setPhotoTree(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.photoModal}>
+            <View style={styles.photoModalHeader}>
+              <TouchableOpacity onPress={() => setPhotoTree(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
+              <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                <Text style={styles.photoModalTitle}>{photoTree?.custom_name}</Text>
+                <Text style={styles.photoModalSubtitle}>{photoTree?.trees?.tree_type}</Text>
+              </View>
+            </View>
+
+            <View style={styles.photoFrame}>
+              {photoLoading ? (
+                <View style={styles.photoLoadingWrap}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={styles.photoLoadingText}>الذكاء الاصطناعي يولّد الصورة...</Text>
+                </View>
+              ) : photoUrl ? (
+                <Image source={{ uri: photoUrl }} style={styles.photoImage} />
+              ) : (
+                <View style={styles.photoLoadingWrap}>
+                  <Ionicons name="image-outline" size={48} color={colors.textMuted} />
+                </View>
+              )}
+              {photoError && (
+                <View style={styles.photoErrorBanner}>
+                  <Text style={styles.photoErrorText}>{photoError}</Text>
+                </View>
+              )}
+            </View>
+
+            <Text style={styles.seasonLabel}>اختر الموسم</Text>
+            <View style={styles.seasonRow}>
+              {(['Spring', 'Summer', 'Autumn', 'Winter'] as const).map((s) => {
+                const labels = { Spring: 'الربيع', Summer: 'الصيف', Autumn: 'الخريف', Winter: 'الشتاء' };
+                const icons = { Spring: 'flower', Summer: 'sunny', Autumn: 'leaf', Winter: 'snow' } as const;
+                const active = photoSeason === s;
+                return (
+                  <TouchableOpacity
+                    key={s}
+                    style={[styles.seasonBtn, active && styles.seasonBtnActive]}
+                    onPress={() => photoTree && openPhotos(photoTree, s)}
+                    disabled={photoLoading}
+                  >
+                    <Ionicons name={icons[s]} size={16} color={active ? '#FFFFFF' : colors.primary} />
+                    <Text style={[styles.seasonBtnText, active && styles.seasonBtnTextActive]}>{labels[s]}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              style={styles.regenerateBtn}
+              onPress={() => photoTree && openPhotos(photoTree, photoSeason)}
+              disabled={photoLoading}
+            >
+              <Ionicons name="refresh" size={16} color={colors.primary} />
+              <Text style={styles.regenerateBtnText}>إعادة التوليد</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -615,5 +719,70 @@ const styles = StyleSheet.create({
     fontFamily: 'Cairo_600SemiBold',
     fontSize: 14,
     color: '#fff',
+  },
+  viewPhotosHint: {
+    flexDirection: 'row-reverse', alignItems: 'center', gap: 4, marginTop: 6,
+  },
+  viewPhotosHintText: {
+    fontFamily: 'Cairo_600SemiBold', fontSize: 11, color: '#7C3AED',
+  },
+  photoModal: {
+    width: '92%', maxWidth: 480,
+    backgroundColor: '#FFFFFF', borderRadius: 20, padding: 16,
+  },
+  photoModalHeader: {
+    flexDirection: 'row-reverse', alignItems: 'center', marginBottom: 12, gap: 8,
+  },
+  photoModalTitle: {
+    fontFamily: 'Cairo_700Bold', fontSize: 18, color: colors.textPrimary,
+    textAlign: 'right', writingDirection: 'rtl',
+  },
+  photoModalSubtitle: {
+    fontFamily: 'Cairo_400Regular', fontSize: 13, color: colors.textMuted,
+    textAlign: 'right', writingDirection: 'rtl',
+  },
+  photoFrame: {
+    aspectRatio: 4 / 5, width: '100%', borderRadius: 14, overflow: 'hidden',
+    backgroundColor: '#F1F5F9', marginBottom: 14,
+  },
+  photoImage: { width: '100%', height: '100%' },
+  photoLoadingWrap: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12,
+  },
+  photoLoadingText: {
+    fontFamily: 'Cairo_600SemiBold', fontSize: 13, color: colors.textMuted,
+  },
+  photoErrorBanner: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)', padding: 8,
+  },
+  photoErrorText: {
+    fontFamily: 'Cairo_400Regular', fontSize: 11, color: '#FFFFFF',
+    textAlign: 'center', writingDirection: 'rtl',
+  },
+  seasonLabel: {
+    fontFamily: 'Cairo_700Bold', fontSize: 13, color: colors.textPrimary,
+    textAlign: 'right', writingDirection: 'rtl', marginBottom: 8,
+  },
+  seasonRow: {
+    flexDirection: 'row-reverse', gap: 6, marginBottom: 12,
+  },
+  seasonBtn: {
+    flex: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center',
+    gap: 4, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1, borderColor: colors.primary, backgroundColor: '#FFFFFF',
+  },
+  seasonBtnActive: { backgroundColor: colors.primary },
+  seasonBtnText: {
+    fontFamily: 'Cairo_600SemiBold', fontSize: 12, color: colors.primary,
+  },
+  seasonBtnTextActive: { color: '#FFFFFF' },
+  regenerateBtn: {
+    flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  regenerateBtnText: {
+    fontFamily: 'Cairo_600SemiBold', fontSize: 13, color: colors.primary,
   },
 });

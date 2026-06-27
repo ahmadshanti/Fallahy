@@ -14,10 +14,15 @@ import { radius, spacing } from '../../constants/spacing';
 import { useAuthStore } from '../../store/authStore';
 import { getTreesByFarmer, addTree, deleteTree } from '../../lib/trees';
 import { supabase } from '../../lib/supabase';
+import { isDevMode } from '../../lib/devMode';
+import { useDevFarmerTreesStore } from '../../store/devFarmerTreesStore';
 
 export default function FarmerTreesScreen() {
   const router = useRouter();
   const farmerId = useAuthStore((s) => s.farmerId);
+  const devTrees = useDevFarmerTreesStore((s) => s.created);
+  const addDevTree = useDevFarmerTreesStore((s) => s.add);
+  const removeDevTree = useDevFarmerTreesStore((s) => s.remove);
   const [trees, setTrees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -38,8 +43,13 @@ export default function FarmerTreesScreen() {
     if (!farmerId) return;
     setLoading(true);
     try {
-      const data = await getTreesByFarmer(farmerId);
-      setTrees(data);
+      // In dev mode skip DB (fake farmer ID has no FK target rows)
+      if (isDevMode) {
+        setTrees(devTrees);
+      } else {
+        const data = await getTreesByFarmer(farmerId);
+        setTrees(data);
+      }
     } catch (err) {
       console.log('Error loading trees:', err);
     } finally {
@@ -82,14 +92,17 @@ export default function FarmerTreesScreen() {
   };
 
   const handleAddTree = async () => {
-    if (!treeType || !annualPrice || !farmerId) {
-      Alert.alert('تنبيه', 'يرجى ملء الحقول المطلوبة');
+    // Hard guards — Number('') is 0 but annual_price column is NOT NULL,
+    // and Postgres has been known to coerce the JSON value before insert.
+    const price = parseFloat(annualPrice);
+    if (!treeType || !annualPrice.trim() || isNaN(price) || price <= 0 || !farmerId) {
+      Alert.alert('تنبيه', 'يرجى ملء الحقول المطلوبة (نوع الشجرة + السعر السنوي)');
       return;
     }
     setSaving(true);
     try {
       let imageUrl: string | null = null;
-      if (imageUri) {
+      if (imageUri && !isDevMode) {
         try {
           const fileExt = imageUri.split('.').pop()?.split('?')[0] || 'jpg';
           const fileName = `${farmerId}/${Date.now()}.${fileExt}`;
@@ -103,20 +116,30 @@ export default function FarmerTreesScreen() {
         } catch (imgErr) {
           console.log('Image upload skipped:', imgErr);
         }
+      } else if (imageUri && isDevMode) {
+        // Just use the local file URI in dev mode (no storage write)
+        imageUrl = imageUri;
       }
 
-      await addTree({
+      const treeData = {
         farmer_id: farmerId,
         tree_type: treeType,
         suggested_name: suggestedName || null,
-        age_years: Number(ageYears) || null,
+        age_years: ageYears ? Number(ageYears) : null,
         image_url: imageUrl,
-        annual_price: Number(annualPrice),
-        available_count: Number(availableCount) || 1,
+        annual_price: price,
+        available_count: availableCount ? Number(availableCount) : 1,
         production_season: productionSeason || null,
         soil_type: soilType || null,
         extra_info: extraInfo || null,
-      });
+      };
+
+      if (isDevMode) {
+        // Fake farmer UUID violates trees_farmer_id_fkey — save locally
+        addDevTree({ ...(treeData as any), id: `dev-tree-${Date.now()}` });
+      } else {
+        await addTree(treeData);
+      }
 
       Alert.alert('تم', 'تم إضافة الشجرة بنجاح');
       resetForm();
@@ -140,7 +163,11 @@ export default function FarmerTreesScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteTree(treeId);
+              if (isDevMode || treeId.startsWith('dev-tree-')) {
+                removeDevTree(treeId);
+              } else {
+                await deleteTree(treeId);
+              }
               setTrees((prev) => prev.filter((t) => t.id !== treeId));
             } catch (err: any) {
               Alert.alert('خطأ', err?.message || 'فشل حذف الشجرة');
