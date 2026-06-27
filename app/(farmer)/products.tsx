@@ -9,25 +9,43 @@ import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 import { useAuthStore } from '../../store/authStore';
 import { getProductsByFarmer, updateProduct, deleteProduct } from '../../lib/products';
+import { isDevMode } from '../../lib/devMode';
+import { useDevProductsStore } from '../../store/devProductsStore';
 
 export default function FarmerProductsScreen() {
   const router = useRouter();
   const farmerId = useAuthStore((s) => s.farmerId);
-  const [products, setProducts] = useState<any[]>([]);
+  const devCreated = useDevProductsStore((s) => s.created);
+  const devOverrides = useDevProductsStore((s) => s.overrides);
+  const removeDevProduct = useDevProductsStore((s) => s.remove);
+  const updateDevProduct = useDevProductsStore((s) => s.updateProduct);
+  const [dbProducts, setDbProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadProducts = async () => {
     if (!farmerId) return;
     setLoading(true);
     try {
+      // In dev mode the fake farmer ID has no rows in `farmers` table, so
+      // the inner-join would return nothing; skip the call.
+      if (isDevMode) {
+        setDbProducts([]);
+        return;
+      }
       const data = await getProductsByFarmer(farmerId);
-      setProducts(data);
+      setDbProducts(data);
     } catch (err) {
       console.log('Error loading products:', err);
     } finally {
       setLoading(false);
     }
   };
+
+  // Merge dev-store-created products (and apply edit overrides) onto DB results
+  const products = (() => {
+    const withOverrides = dbProducts.map((p) => devOverrides[p.id] ? { ...p, ...devOverrides[p.id] } : p);
+    return [...devCreated, ...withOverrides];
+  })();
 
   useFocusEffect(
     useCallback(() => {
@@ -37,10 +55,14 @@ export default function FarmerProductsScreen() {
 
   const handleToggleAvailability = async (productId: string, currentValue: boolean) => {
     try {
-      await updateProduct(productId, { is_available: !currentValue });
-      setProducts((prev) =>
-        prev.map((p) => (p.id === productId ? { ...p, is_available: !currentValue } : p))
-      );
+      if (isDevMode || productId.startsWith('dev-')) {
+        updateDevProduct(productId, { is_available: !currentValue });
+      } else {
+        await updateProduct(productId, { is_available: !currentValue });
+        setDbProducts((prev) =>
+          prev.map((p) => (p.id === productId ? { ...p, is_available: !currentValue } : p))
+        );
+      }
     } catch (err: any) {
       Alert.alert('خطأ', err?.message || 'فشل تحديث المنتج');
     }
@@ -57,8 +79,12 @@ export default function FarmerProductsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteProduct(productId);
-              setProducts((prev) => prev.filter((p) => p.id !== productId));
+              if (isDevMode || productId.startsWith('dev-')) {
+                removeDevProduct(productId);
+              } else {
+                await deleteProduct(productId);
+                setDbProducts((prev) => prev.filter((p) => p.id !== productId));
+              }
             } catch (err: any) {
               Alert.alert('خطأ', err?.message || 'فشل حذف المنتج');
             }

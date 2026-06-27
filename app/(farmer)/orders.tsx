@@ -11,6 +11,8 @@ import { getOrdersByFarmer, updateOrderStatus } from '../../lib/orders';
 import { sendNotification } from '../../lib/notifications';
 import { getOrCreateConversation } from '../../lib/chat';
 import { supabase } from '../../lib/supabase';
+import { isDevMode } from '../../lib/devMode';
+import { useDevOrdersStore } from '../../store/devOrdersStore';
 
 const tabs = [
   { key: 'pending', label: 'جديدة' },
@@ -22,8 +24,10 @@ const tabs = [
 export default function FarmerOrdersScreen() {
   const router = useRouter();
   const farmerId = useAuthStore((s) => s.farmerId);
+  const devOrders = useDevOrdersStore((s) => s.orders);
+  const updateDevOrderStatus = useDevOrdersStore((s) => s.updateStatus);
   const [activeTab, setActiveTab] = useState('pending');
-  const [orders, setOrders] = useState<any[]>([]);
+  const [dbOrders, setDbOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
@@ -31,8 +35,12 @@ export default function FarmerOrdersScreen() {
     if (!farmerId) return;
     setLoading(true);
     try {
+      if (isDevMode) {
+        setDbOrders([]);
+        return;
+      }
       const data = await getOrdersByFarmer(farmerId);
-      setOrders(data);
+      setDbOrders(data);
     } catch (err) {
       console.log('Error loading orders:', err);
     } finally {
@@ -40,15 +48,43 @@ export default function FarmerOrdersScreen() {
     }
   };
 
+  // In dev mode show ALL dev orders (so we can test approval end-to-end
+  // even when the buyer ordered from a real farmer's product, not our fake one)
+  const orders = isDevMode
+    ? [
+        ...devOrders.map((o) => ({
+          id: o.id,
+          buyer_id: o.buyer_id,
+          farmer_id: o.farmer_id,
+          status: o.status,
+          total_price: o.total_price,
+          delivery_address: o.delivery_address,
+          notes: o.notes,
+          created_at: o.created_at,
+          order_items: o.items.map((it, idx) => ({
+            id: `${o.id}-${idx}`,
+            order_id: o.id,
+            product_id: it.product_id,
+            quantity: it.quantity,
+            unit_price: it.unit_price,
+            sale_type: it.sale_type,
+            products: { name: it.product_name || '' },
+          })),
+          users: { full_name: 'مستخدم تجريبي', phone: '+970590000001' },
+        })),
+        ...dbOrders,
+      ]
+    : dbOrders;
+
   useFocusEffect(
     useCallback(() => {
       loadOrders();
     }, [farmerId])
   );
 
-  // Subscribe to realtime new orders
+  // Subscribe to realtime new orders (skip in dev mode — no DB rows)
   useEffect(() => {
-    if (!farmerId) return;
+    if (!farmerId || isDevMode) return;
     const channel = supabase
       .channel(`farmer-orders-${farmerId}`)
       .on('postgres_changes', {
@@ -77,23 +113,24 @@ export default function FarmerOrdersScreen() {
   const handleStatusUpdate = async (orderId: string, newStatus: string, buyerId?: string) => {
     setActionLoading(orderId);
     try {
-      await updateOrderStatus(orderId, newStatus);
-
-      // Send notification to buyer
-      if (buyerId) {
-        const statusMessages: Record<string, string> = {
-          accepted: 'تم قبول طلبك',
-          rejected: 'تم رفض طلبك',
-          preparing: 'بدأ تجهيز طلبك',
-          out_for_delivery: 'طلبك خرج من المزرعة',
-          delivered: 'تم تسليم طلبك',
-        };
-        const message = statusMessages[newStatus] || 'تم تحديث حالة طلبك';
-        await sendNotification(buyerId, 'order_update', 'تحديث الطلب', message).catch(() => {});
+      if (isDevMode || orderId.startsWith('dev-order-')) {
+        // Dev order — update local store (buyer's view reacts via zustand)
+        updateDevOrderStatus(orderId, newStatus);
+      } else {
+        await updateOrderStatus(orderId, newStatus);
+        if (buyerId) {
+          const statusMessages: Record<string, string> = {
+            accepted: 'تم قبول طلبك',
+            rejected: 'تم رفض طلبك',
+            preparing: 'بدأ تجهيز طلبك',
+            out_for_delivery: 'طلبك خرج من المزرعة',
+            delivered: 'تم تسليم طلبك',
+          };
+          const message = statusMessages[newStatus] || 'تم تحديث حالة طلبك';
+          await sendNotification(buyerId, 'order_update', 'تحديث الطلب', message).catch(() => {});
+        }
+        await loadOrders();
       }
-
-      // Refresh orders
-      await loadOrders();
     } catch (err: any) {
       Alert.alert('خطأ', err?.message || 'فشل تحديث الطلب');
     } finally {

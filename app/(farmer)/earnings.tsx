@@ -7,12 +7,15 @@ import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 import { useAuthStore } from '../../store/authStore';
 import { getOrdersByFarmer } from '../../lib/orders';
+import { isDevMode } from '../../lib/devMode';
+import { useDevOrdersStore } from '../../store/devOrdersStore';
 
 const periods = ['اليوم', 'الأسبوع', 'الشهر'];
 
 export default function EarningsScreen() {
   const router = useRouter();
   const farmerId = useAuthStore((s) => s.farmerId);
+  const devOrders = useDevOrdersStore((s) => s.orders);
   const [period, setPeriod] = useState('اليوم');
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -26,7 +29,7 @@ export default function EarningsScreen() {
     if (!farmerId) return;
     setLoading(true);
     try {
-      const orders = await getOrdersByFarmer(farmerId);
+      const orders = isDevMode ? devOrders : await getOrdersByFarmer(farmerId);
       const deliveredOrders = orders.filter((o: any) => o.status === 'delivered');
 
       const now = new Date();

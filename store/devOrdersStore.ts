@@ -26,6 +26,7 @@ export interface DevOrder {
 interface DevOrdersStore {
   orders: DevOrder[];
   create: (order: Omit<DevOrder, 'id' | 'status' | 'created_at'>) => DevOrder;
+  updateStatus: (id: string, status: string) => void;
   reset: () => void;
 }
 
@@ -40,6 +41,11 @@ export const useDevOrdersStore = create<DevOrdersStore>((set, get) => ({
     };
     set({ orders: [row, ...get().orders] });
     return row;
+  },
+  updateStatus: (id, status) => {
+    set({
+      orders: get().orders.map((o) => (o.id === id ? { ...o, status } : o)),
+    });
   },
   reset: () => set({ orders: [] }),
 }));

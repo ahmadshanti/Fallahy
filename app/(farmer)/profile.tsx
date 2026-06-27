@@ -15,6 +15,7 @@ import { updateFarmerProfile } from '../../lib/farmers';
 import { getProductsByFarmer } from '../../lib/products';
 import { getOrdersByFarmer } from '../../lib/orders';
 import { supabase } from '../../lib/supabase';
+import { isDevMode } from '../../lib/devMode';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -132,31 +133,34 @@ export default function FarmerProfileScreen() {
     setIsSaving(true);
     try {
       let avatarUrl = farmer?.owner_avatar_url;
-      if (newAvatar) {
-        const uploaded = await uploadImage(newAvatar, 'avatars', farmerId);
-        if (uploaded) avatarUrl = uploaded;
-      }
-
-      // Upload new farm images
       const uploadedFarmImages: string[] = [];
-      for (const img of farmImages) {
-        if (img.startsWith('http')) {
-          uploadedFarmImages.push(img);
-        } else {
-          const uploaded = await uploadImage(img, 'farmer-images', farmerId);
-          if (uploaded) uploadedFarmImages.push(uploaded);
-        }
-      }
 
-      await updateFarmerProfile(farmerId, {
-        owner_name: editOwnerName,
-        farm_name: editFarmName,
-        city: editCity,
-        about: editAbout,
-        whatsapp_number: editWhatsapp,
-        owner_avatar_url: avatarUrl,
-        farm_images: uploadedFarmImages.length > 0 ? uploadedFarmImages : null,
-      });
+      if (!isDevMode) {
+        if (newAvatar) {
+          const uploaded = await uploadImage(newAvatar, 'avatars', farmerId);
+          if (uploaded) avatarUrl = uploaded;
+        }
+        for (const img of farmImages) {
+          if (img.startsWith('http')) {
+            uploadedFarmImages.push(img);
+          } else {
+            const uploaded = await uploadImage(img, 'farmer-images', farmerId);
+            if (uploaded) uploadedFarmImages.push(uploaded);
+          }
+        }
+        await updateFarmerProfile(farmerId, {
+          owner_name: editOwnerName,
+          farm_name: editFarmName,
+          city: editCity,
+          about: editAbout,
+          whatsapp_number: editWhatsapp,
+          owner_avatar_url: avatarUrl,
+          farm_images: uploadedFarmImages.length > 0 ? uploadedFarmImages : null,
+        });
+      } else {
+        // Dev mode — use the local URI for avatar preview, skip storage upload
+        if (newAvatar) avatarUrl = newAvatar;
+      }
 
       updateUser({
         full_name: editOwnerName,

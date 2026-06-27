@@ -9,12 +9,16 @@ import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 import { useAuthStore } from '../../store/authStore';
 import { getProductsByFarmer, updateProduct } from '../../lib/products';
+import { isDevMode } from '../../lib/devMode';
+import { useDevProductsStore } from '../../store/devProductsStore';
 
 const durations = ['ساعة واحدة', '3 ساعات', 'يوم كامل'];
 
 export default function FlashDealScreen() {
   const router = useRouter();
   const farmerId = useAuthStore((s) => s.farmerId);
+  const devProducts = useDevProductsStore((s) => s.created);
+  const updateDevProduct = useDevProductsStore((s) => s.updateProduct);
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
@@ -31,7 +35,7 @@ export default function FlashDealScreen() {
     if (!farmerId) return;
     setLoading(true);
     try {
-      const data = await getProductsByFarmer(farmerId);
+      const data = isDevMode ? devProducts : await getProductsByFarmer(farmerId);
       setProducts(data);
       if (data.length > 0) {
         setSelectedProduct(data[0]);
@@ -47,9 +51,12 @@ export default function FlashDealScreen() {
     if (!selectedProduct || !dealPrice) return;
     setPublishing(true);
     try {
-      await updateProduct(selectedProduct.id, {
-        discount_percent: Math.round((1 - Number(dealPrice) / (selectedProduct.retail_price || 1)) * 100),
-      });
+      const discount = Math.round((1 - Number(dealPrice) / (selectedProduct.retail_price || 1)) * 100);
+      if (isDevMode || selectedProduct.id?.startsWith('dev-')) {
+        updateDevProduct(selectedProduct.id, { discount_percent: discount });
+      } else {
+        await updateProduct(selectedProduct.id, { discount_percent: discount });
+      }
       setPublished(true);
     } catch (err: any) {
       Alert.alert('خطأ', err?.message || 'حدث خطأ في نشر العرض');

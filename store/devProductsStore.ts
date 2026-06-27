@@ -14,6 +14,7 @@ interface DevProductsStore {
   overrides: Record<string, Partial<Product>>;
   addProduct: (p: Product) => void;
   updateProduct: (id: string, patch: Partial<Product>) => void;
+  remove: (id: string) => void;
   reset: () => void;
 }
 
@@ -31,6 +32,13 @@ export const useDevProductsStore = create<DevProductsStore>((set, get) => ({
       return;
     }
     set({ overrides: { ...get().overrides, [id]: { ...(get().overrides[id] ?? {}), ...patch } } });
+  },
+  remove: (id) => {
+    // Remove from session-created OR mark as hidden in overrides.
+    set({
+      created: get().created.filter((p) => p.id !== id),
+      overrides: { ...get().overrides, [id]: { ...(get().overrides[id] ?? {}), is_available: false } },
+    });
   },
   reset: () => set({ created: [], overrides: {} }),
 }));
