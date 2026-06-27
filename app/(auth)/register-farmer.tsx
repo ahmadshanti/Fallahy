@@ -14,7 +14,7 @@ const specialties = ['خضار', 'فواكه', 'زيوت', 'أعشاب'];
 
 export default function RegisterFarmerScreen() {
   const router = useRouter();
-  const { user, login } = useAuthStore();
+  const { user, loginAsFarmer } = useAuthStore();
   const [farmName, setFarmName] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [city, setCity] = useState('');
@@ -60,28 +60,28 @@ export default function RegisterFarmerScreen() {
         }
       }
 
-      // Update profile
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({
-          id: userId,
-          name: ownerName,
+      // Insert into v2 farmers table (the `profiles` table from v1 doesn't exist)
+      const { data: farmerRow, error } = await supabase
+        .from('farmers')
+        .insert({
+          user_id: userId,
+          owner_name: ownerName,
           farm_name: farmName,
           city,
-          role: 'farmer',
-          specialty: selectedSpecialties,
-          phone: user?.phone || '',
-        });
+          whatsapp_number: user?.phone || '',
+        })
+        .select()
+        .single();
 
-      if (error) {
-        Alert.alert('خطأ', error.message);
+      if (error || !farmerRow) {
+        Alert.alert('خطأ', error?.message || 'فشل تسجيل المزرعة');
         setLoading(false);
         return;
       }
 
-      login(
-        { id: userId, name: farmName, phone: user?.phone || '', role: 'farmer', city },
-        'farmer'
+      loginAsFarmer(
+        { id: userId, full_name: ownerName, phone: user?.phone || '' },
+        farmerRow
       );
       router.replace('/(farmer)');
     } catch (err: any) {
