@@ -58,9 +58,9 @@ export function usePriceTicker() {
         try {
           const res = await aiPriceTicker();
           return res.ticker.map((t) => ({
-            name: t.name,
+            name: t.crop,
             price: Number(t.price),
-            change: t.change,
+            change: t.direction,
             symbol: '₪',
           }));
         } catch {
