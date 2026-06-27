@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { aiServiceConfigured, priceTicker as aiPriceTicker } from '../lib/aiService';
 
 export function useBuyerSavings(buyerId: string) {
   return useQuery({
@@ -50,12 +51,28 @@ function getPointsToNext(points: number): number {
 
 export function usePriceTicker() {
   return useQuery({
-    queryKey: ['priceTicker'],
+    queryKey: ['priceTicker', aiServiceConfigured],
     queryFn: async () => {
+      // Prefer live ticker from Rwan's AI/data service when available.
+      if (aiServiceConfigured) {
+        try {
+          const res = await aiPriceTicker();
+          return res.ticker.map((t) => ({
+            name: t.name,
+            price: Number(t.price),
+            change: t.change,
+            symbol: '₪',
+          }));
+        } catch {
+          // Fall through to Supabase
+        }
+      }
+
+      // Fallback: derive from Supabase products
       const { data, error } = await supabase
         .from('products')
         .select('name, retail_price, category')
-        .gt('available', 0)
+        .eq('is_available', true)
         .order('created_at', { ascending: false })
         .limit(10);
       if (error) throw error;

@@ -20,6 +20,8 @@ import { getProducts } from '../../lib/products';
 import { getFarmersByCity, getAllFarmers } from '../../lib/farmers';
 import { getUnreadCount } from '../../lib/notifications';
 import { Product, Farmer } from '../../types';
+import AIHelperModal from '../../components/buyer/AIHelperModal';
+import { usePriceTicker } from '../../hooks/useSavings';
 
 export default function BuyerHome() {
   const router = useRouter();
@@ -31,6 +33,8 @@ export default function BuyerHome() {
   const [farmers, setFarmers] = useState<Farmer[]>([]);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [aiOpen, setAiOpen] = useState(false);
+  const { data: tickerItems = [] } = usePriceTicker();
 
   useEffect(() => {
     loadData();
@@ -175,6 +179,29 @@ export default function BuyerHome() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Live price ticker — prefers Rwan's AI analytics, falls back to Supabase */}
+        {tickerItems.length > 0 && (
+          <View style={styles.ticker}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 12, gap: 18, flexDirection: 'row-reverse' }}
+            >
+              {tickerItems.map((t, i) => (
+                <View key={`${t.name}-${i}`} style={styles.tickerItem}>
+                  <Text style={styles.tickerName}>{t.name}</Text>
+                  <Text style={styles.tickerPrice}>{t.symbol}{Number(t.price).toFixed(2)}</Text>
+                  <Ionicons
+                    name={t.change === 'up' ? 'trending-up' : t.change === 'down' ? 'trending-down' : 'remove'}
+                    size={14}
+                    color={t.change === 'up' ? '#E63946' : t.change === 'down' ? colors.success : colors.textMuted}
+                  />
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {/* Hero Banner */}
         <LinearGradient
           colors={[colors.primary, colors.primaryDark]}
@@ -276,6 +303,19 @@ export default function BuyerHome() {
 
         <View style={{ height: 30 }} />
       </ScrollView>
+
+      {/* AI floating chatbot button (calls Rwan's /api/ai/chat) */}
+      <TouchableOpacity
+        style={styles.aiFab}
+        onPress={() => setAiOpen(true)}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel="المساعد الذكي"
+      >
+        <Ionicons name="sparkles" size={26} color="#FFFFFF" />
+      </TouchableOpacity>
+
+      <AIHelperModal visible={aiOpen} onClose={() => setAiOpen(false)} role="buyer" />
     </View>
   );
 }
@@ -612,5 +652,36 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: 'center',
     writingDirection: 'rtl',
+  },
+  ticker: {
+    height: 36,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    marginHorizontal: 16,
+    borderRadius: 10,
+    marginBottom: 16,
+  },
+  tickerItem: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+  },
+  tickerName: { fontFamily: 'Cairo_600SemiBold', fontSize: 12, color: colors.textPrimary },
+  tickerPrice: { fontFamily: 'Cairo_700Bold', fontSize: 13, color: colors.primary },
+  aiFab: {
+    position: 'absolute',
+    bottom: 24,
+    left: 20,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#7C3AED',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
   },
 });

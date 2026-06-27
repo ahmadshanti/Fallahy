@@ -8,6 +8,7 @@ import { radius, spacing } from '../../constants/spacing';
 import { useAuthStore } from '../../store/authStore';
 import { getOrdersByFarmer } from '../../lib/orders';
 import { getProductsByFarmer } from '../../lib/products';
+import { aiServiceConfigured, farmerDashboard, FarmerDashboard as AIDash } from '../../lib/aiService';
 
 export default function FarmerDashboard() {
   const router = useRouter();
@@ -19,10 +20,15 @@ export default function FarmerDashboard() {
   const [pendingOrders, setPendingOrders] = useState(0);
   const [monthRevenue, setMonthRevenue] = useState(0);
   const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
+  const [aiDash, setAiDash] = useState<AIDash | null>(null);
 
   useEffect(() => {
     if (!farmerId) return;
     loadDashboard();
+    // Pull AI/analytics dashboard in parallel (revenue forecast + smart alerts)
+    if (aiServiceConfigured) {
+      farmerDashboard(farmerId).then(setAiDash).catch(() => setAiDash(null));
+    }
   }, [farmerId]);
 
   const loadDashboard = async () => {
@@ -119,10 +125,38 @@ export default function FarmerDashboard() {
           </View>
         </View>
 
+        {/* AI revenue forecast (when Rwan's service is reachable) */}
+        {aiDash && (
+          <View style={styles.aiBanner}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.aiBannerTitle}>توقع اليوم بالذكاء الاصطناعي</Text>
+              <Text style={styles.aiBannerValue}>
+                ₪{aiDash.estimated_daily_revenue.toFixed(0)} / يوم
+              </Text>
+            </View>
+            <View style={styles.aiBadge}>
+              <Ionicons name="sparkles" size={14} color="#7C3AED" />
+              <Text style={styles.aiBadgeText}>AI</Text>
+            </View>
+          </View>
+        )}
+
         {/* Smart Alerts */}
         <Text style={styles.sectionTitle}>تنبيهات ذكية</Text>
         <View style={styles.alertsSection}>
-          {lowStockProducts.length === 0 && pendingOrders === 0 ? (
+          {/* AI alerts first when available */}
+          {aiDash?.smart_alerts.map((msg, i) => (
+            <View key={`ai-${i}`} style={[styles.alertCard, { borderColor: '#7C3AED40', borderWidth: 1 }]}>
+              <View style={styles.alertContent}>
+                <Text style={styles.alertText}>{msg}</Text>
+                <Text style={[styles.alertTitle, { color: '#7C3AED' }]}>تنبيه ذكي</Text>
+              </View>
+              <View style={[styles.alertIcon, { backgroundColor: '#F3E8FF' }]}>
+                <Ionicons name="sparkles" size={18} color="#7C3AED" />
+              </View>
+            </View>
+          ))}
+          {lowStockProducts.length === 0 && pendingOrders === 0 && !aiDash?.smart_alerts.length ? (
             <View style={styles.emptyAlert}>
               <Ionicons name="checkmark-circle-outline" size={24} color={colors.success} />
               <Text style={styles.emptyAlertText}>لا توجد تنبيهات حالياً</Text>
@@ -271,4 +305,23 @@ const styles = StyleSheet.create({
   actionLabel: {
     fontFamily: 'Cairo_600SemiBold', fontSize: 13, color: colors.textPrimary,
   },
+  aiBanner: {
+    marginHorizontal: spacing.md, marginBottom: spacing.md,
+    backgroundColor: '#F3E8FF', borderRadius: radius.xl, padding: spacing.md,
+    flexDirection: 'row-reverse', alignItems: 'center', gap: spacing.sm,
+  },
+  aiBannerTitle: {
+    fontFamily: 'Cairo_600SemiBold', fontSize: 13, color: '#5B21B6',
+    textAlign: 'right', writingDirection: 'rtl',
+  },
+  aiBannerValue: {
+    fontFamily: 'Cairo_700Bold', fontSize: 20, color: '#7C3AED',
+    textAlign: 'right', writingDirection: 'rtl', marginTop: 2,
+  },
+  aiBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#FFFFFF', borderRadius: radius.full,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  aiBadgeText: { fontFamily: 'Cairo_700Bold', fontSize: 11, color: '#7C3AED' },
 });

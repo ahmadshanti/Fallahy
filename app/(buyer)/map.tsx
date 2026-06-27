@@ -4,20 +4,44 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Avatar from '../../components/ui/Avatar';
-import RatingStars from '../../components/ui/RatingStars';
 import Button from '../../components/ui/Button';
 import CategoryFilter from '../../components/buyer/CategoryFilter';
 import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 import { useFarmers } from '../../hooks/useFarmers';
+import { aiServiceConfigured, nearbyFarmers, ApiFarmer } from '../../lib/aiService';
 
 const categories = ['الكل', 'خضار', 'فواكه', 'زيوت'];
+// Ramallah default — replace with expo-location later if you want true GPS
+const DEFAULT_LAT = 31.9038;
+const DEFAULT_LNG = 35.2034;
 
 export default function MapScreen() {
   const router = useRouter();
-  const { data: farmers = [], isLoading } = useFarmers();
+  const { data: dbFarmers = [], isLoading } = useFarmers();
+  const [aiFarmers, setAiFarmers] = useState<ApiFarmer[]>([]);
+  const [aiSource, setAiSource] = useState<'azure' | 'haversine' | null>(null);
   const [selectedFarmer, setSelectedFarmer] = useState<any>(null);
   const [selectedCategory, setSelectedCategory] = useState('الكل');
+
+  // Try Rwan's /api/maps/nearby-farmers; if it returns rows, prefer them
+  useEffect(() => {
+    if (!aiServiceConfigured) return;
+    nearbyFarmers(DEFAULT_LAT, DEFAULT_LNG, 50)
+      .then((res) => { setAiFarmers(res.farmers); setAiSource(res.source); })
+      .catch(() => setAiFarmers([]));
+  }, []);
+
+  // Use AI farmers if we got any (shape: ApiFarmer), otherwise the Supabase ones
+  const farmers: any[] = aiFarmers.length > 0
+    ? aiFarmers.map((f) => ({
+        id: f.id,
+        farm_name: f.name,
+        city: f.city,
+        owner_avatar_url: '',
+        distance_km: f.distance_km,
+      }))
+    : dbFarmers;
 
   useEffect(() => {
     if (farmers.length && !selectedFarmer) {
@@ -38,16 +62,27 @@ export default function MapScreen() {
             <Text style={styles.mapSubtext}>سيتم عرض مواقع المزارعين هنا</Text>
 
             {/* Farmer Markers (simulated) */}
-            {farmers.map((farmer, i) => (
-              <TouchableOpacity
-                key={farmer.id}
-                style={[styles.marker, { top: 150 + i * 80, left: 80 + i * 100 }]}
-                onPress={() => setSelectedFarmer(farmer)}
-              >
-                <Ionicons name="location" size={28} color={colors.primary} />
-                <Text style={styles.markerLabel}>{farmer.name.substring(0, 10)}</Text>
-              </TouchableOpacity>
-            ))}
+            {farmers.map((farmer, i) => {
+              const label = (farmer.farm_name || farmer.name || '').substring(0, 10);
+              return (
+                <TouchableOpacity
+                  key={farmer.id}
+                  style={[styles.marker, { top: 150 + i * 80, left: 80 + i * 100 }]}
+                  onPress={() => setSelectedFarmer(farmer)}
+                >
+                  <Ionicons name="location" size={28} color={colors.primary} />
+                  <Text style={styles.markerLabel}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+            {aiSource && (
+              <View style={styles.aiSourceBadge}>
+                <Ionicons name="sparkles" size={11} color="#7C3AED" />
+                <Text style={styles.aiSourceText}>
+                  {aiSource === 'azure' ? 'Azure Maps' : 'حساب المسافات'}
+                </Text>
+              </View>
+            )}
           </>
         )}
       </View>
@@ -73,13 +108,18 @@ export default function MapScreen() {
         <View style={styles.bottomSheet}>
           <View style={styles.handle} />
           <View style={styles.farmerInfo}>
-            <Avatar uri={selectedFarmer.avatar} size={50} />
+            <Avatar uri={selectedFarmer.owner_avatar_url || selectedFarmer.avatar} size={50} />
             <View style={styles.farmerDetails}>
-              <Text style={styles.farmerName}>{selectedFarmer.name}</Text>
-              <RatingStars rating={selectedFarmer.rating} reviewCount={selectedFarmer.reviewCount} />
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Text style={styles.distance}>{selectedFarmer.distance} كم</Text>
+              <Text style={styles.farmerName}>
+                {selectedFarmer.farm_name || selectedFarmer.name || ''}
+              </Text>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4, marginTop: 4 }}>
                 <Ionicons name="location-outline" size={14} color={colors.textMuted} />
+                <Text style={styles.distance}>
+                  {selectedFarmer.distance_km != null
+                    ? `${selectedFarmer.distance_km.toFixed(1)} كم`
+                    : selectedFarmer.city || ''}
+                </Text>
               </View>
             </View>
           </View>
@@ -150,4 +190,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Cairo_400Regular', fontSize: 13, color: colors.textMuted,
     textAlign: 'right', marginTop: 2,
   },
+  aiSourceBadge: {
+    position: 'absolute', bottom: 12, right: 12,
+    flexDirection: 'row-reverse', alignItems: 'center', gap: 4,
+    backgroundColor: '#FFFFFF', borderRadius: 999,
+    paddingHorizontal: 10, paddingVertical: 5,
+    elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4,
+  },
+  aiSourceText: { fontFamily: 'Cairo_600SemiBold', fontSize: 10, color: '#7C3AED' },
 });

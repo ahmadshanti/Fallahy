@@ -18,6 +18,7 @@ import { getOrCreateConversation } from '../../../lib/chat';
 import { useAuthStore } from '../../../store/authStore';
 import { useCartStore } from '../../../store/cartStore';
 import { Product } from '../../../types';
+import { aiServiceConfigured, priceComparison, PriceComparison } from '../../../lib/aiService';
 
 export default function ProductDetailScreen() {
   const router = useRouter();
@@ -28,6 +29,7 @@ export default function ProductDetailScreen() {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
+  const [priceComp, setPriceComp] = useState<PriceComparison | null>(null);
   const [saleType, setSaleType] = useState<'retail' | 'wholesale'>('retail');
 
   useEffect(() => {
@@ -39,6 +41,10 @@ export default function ProductDetailScreen() {
       setLoading(true);
       const data = await getProductById(id!);
       setProduct(data);
+      // Fire-and-forget: live market vs Fallahy price comparison from AI service
+      if (aiServiceConfigured && data?.name) {
+        priceComparison(data.name).then(setPriceComp).catch(() => setPriceComp(null));
+      }
     } catch (err) {
       console.error('Product load error:', err);
     } finally {
@@ -166,6 +172,23 @@ export default function ProductDetailScreen() {
           <Text style={styles.priceUnit}>/{product.unit}</Text>
           <Text style={styles.price}>{currentPrice.toFixed(2)} د.أ</Text>
         </View>
+
+        {priceComp && (
+          <View style={styles.compareCard}>
+            <View style={styles.compareLine}>
+              <Text style={styles.compareMarketPrice}>₪{priceComp.market_price.toFixed(2)}</Text>
+              <Text style={styles.compareLabel}>سعر السوق</Text>
+            </View>
+            <View style={styles.compareLine}>
+              <Text style={styles.compareFallahyPrice}>₪{priceComp.fallahy_price.toFixed(2)}</Text>
+              <Text style={styles.compareLabel}>من الأرض</Text>
+            </View>
+            <View style={styles.compareSavingsBadge}>
+              <Ionicons name="trending-down" size={14} color="#FFFFFF" />
+              <Text style={styles.compareSavingsText}>وفّر {priceComp.savings_percent}%</Text>
+            </View>
+          </View>
+        )}
 
         {/* Description */}
         {product.description && (
@@ -415,6 +438,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textMuted,
   },
+  compareCard: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: 12,
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    gap: 6,
+  },
+  compareLine: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' },
+  compareLabel: { fontFamily: 'Cairo_600SemiBold', fontSize: 13, color: colors.textPrimary },
+  compareMarketPrice: { fontFamily: 'Cairo_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'line-through' },
+  compareFallahyPrice: { fontFamily: 'Cairo_700Bold', fontSize: 16, color: colors.success },
+  compareSavingsBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: colors.success, borderRadius: 999,
+    paddingHorizontal: 10, paddingVertical: 4, marginTop: 4,
+  },
+  compareSavingsText: { fontFamily: 'Cairo_700Bold', fontSize: 12, color: '#FFFFFF' },
   descSection: {
     marginBottom: 16,
   },
