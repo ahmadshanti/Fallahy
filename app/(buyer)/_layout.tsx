@@ -28,6 +28,8 @@ const hiddenScreens = [
   'alerts',
   'address',
   'settings',
+  'messages/new',
+  'messages/[farmerId]',
 ];
 
 export default function BuyerLayout() {

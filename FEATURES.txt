@@ -1,0 +1,370 @@
+FALLAHY (الفلاحي) — Product Brief for AI Review
+===============================================
+
+This document describes every feature, screen, and integration that ships in the
+Fallahy mobile app. It is written specifically so a model like Gemini can read it
+once and give product-, UX-, and engineering-level suggestions back. Pretend you
+are reviewing a hackathon submission and want to give actionable critique.
+
+
+1. WHAT THE APP IS
+------------------
+
+Fallahy is an Arabic-first (right-to-left) marketplace that connects Palestinian
+home-cooks (buyers) directly with local farmers, cutting out the wholesale middle-
+men so families get fresher produce at lower prices and farmers earn a larger
+share of each sale.
+
+Tagline: "من الأرض لبيتك مباشرة" / "From the farm to your home"
+
+Primary platform: iOS + Android (Expo SDK 54, React Native 0.81, expo-router v6).
+The web target compiles but is not the focus — touch-first layouts.
+
+Two distinct users live in the same app:
+  - Buyer (مشتري)  — shops produce, places orders, can adopt trees, chats with farmers.
+  - Farmer (مزارع) — lists produce, fulfils orders, sees earnings + smart alerts.
+
+
+2. AUTH / ROLE SELECTION
+------------------------
+
+Real-mode (no dev flags): phone-OTP via Supabase Auth.
+  - Buyer signs up via a 4-step flow: photo (optional) → name → phone → city.
+  - Farmer signs up via a single form: farm name + owner + city + specialty.
+
+Dev-mode (controlled by env vars, never ship enabled to production):
+  - EXPO_PUBLIC_DEV_MODE=true              → first launch shows a tile picker
+                                              "Continue as Buyer / Continue as Farmer"
+                                              with no DB writes.
+  - EXPO_PUBLIC_DEV_AUTH_ROLE=buyer|farmer → auto-login on app start as that role.
+  - EXPO_PUBLIC_DEV_OTP_BYPASS=true        → if real login is still used, accept
+                                              "0000" as the OTP instead of sending SMS.
+
+The dev mode swaps every data hook to return curated mock data
+(constants/mockData.ts) so the UI is fully populated for demos and design review
+without touching Supabase.
+
+
+3. BUYER EXPERIENCE
+-------------------
+
+3.1 Home tab (/(buyer)/index.tsx)
+  - Location strip: shows the buyer's city, primary CTA back to profile.
+  - Cart + notifications icon buttons (badge counts).
+  - Voice-search affordance + search bar that navigates to Explore.
+  - Hero banner (promotional).
+  - Live price ticker pulling current retail vs. market prices (PriceTicker.tsx
+    is an animated marquee that flags items where the farmer beat the local
+    market price).
+  - Savings banner: shows ILS saved this month.
+  - **Feature tiles** (newly added in v2): two prominent cards side-by-side —
+    "Adopt a tree" and "Pick your own" — directly on the home feed instead of
+    hidden inside product detail.
+  - "Most ordered" horizontal carousel of products.
+  - **"Farmers in {your city}"** section — filtered by the buyer's saved city
+    automatically; falls back to "Farmers near you" when no city is set; empty
+    state explicitly tells the buyer no farmers are registered there yet.
+
+3.2 Explore tab (/(buyer)/explore.tsx)
+  - Auto-focused search bar.
+  - **CategoryFilter** — circular icon + label chips with a horizontal scroll
+    (Ionicons mapping per category). Rebuilt in v2 after the original chips
+    stretched vertically on tall flex parents.
+  - Retail / Wholesale toggle.
+  - Filter pills: "Organic only", "Available now".
+  - FlashList grid of ProductCards (2 columns).
+
+3.3 Product detail (/(buyer)/product/[id].tsx)
+  - Hero image with gradient overlay, share + favorite icon buttons.
+  - Tag row: قُطف اليوم / عضوي / فلسطيني المنشأ when applicable.
+  - Price block: market price (strikethrough) vs. Fallahy price, savings badge.
+  - Retail / Wholesale price toggle (hidden when the farmer didn't set a
+    wholesale price).
+  - Farmer mini-card → routes to farmer profile.
+  - **Listen button (TTS)** — when EXPO_PUBLIC_AZURE_SPEECH_KEY+REGION are set,
+    the buyer can tap "استمع للوصف" and Azure neural TTS reads the product
+    summary aloud in their selected language (ar-PS-LailaNeural for Arabic,
+    en-US-JennyNeural for English). Designed especially so farmers with low
+    literacy can use the app comfortably (same hook is also used on the farmer
+    side wherever long copy lives). ElevenLabs is supported as a swap-in via
+    EXPO_PUBLIC_ELEVENLABS_API_KEY.
+  - "Adopt a tree" / "Pick your own" CTAs surface only when the product opts in
+    (isAdoptable / isSelfPick flags).
+  - Bottom bar: quantity stepper + Add-to-cart.
+
+3.4 Cart & checkout
+  - Cart (/(buyer)/cart.tsx): RTL row layout, per-item quantity stepper, delete
+    with hitSlop + accessibility label, subtotal/total/savings summary,
+    delivery vs self-pickup picker.
+  - Checkout (/(buyer)/checkout.tsx): **groups the cart by farmerId and creates
+    one order per farmer**. If the cart contains items from multiple farmers,
+    a banner explains that separate orders will be created. Payment methods are
+    centralised in constants/paymentMethods.ts.
+
+3.5 Orders & tracking
+  - /(buyer)/orders.tsx — tabs (الكل / جارية / مكتملة / ملغية) actually filter
+    by status. FlashList of orders.
+  - /(buyer)/order-tracking/[id].tsx — animated timeline (received → preparing
+    → on the way → delivered), distance chip, map placeholder, and live Call /
+    WhatsApp buttons that use Linking.canOpenURL + tel: / wa.me/ URIs (with a
+    graceful "غير متاح" alert when the device can't open them or no phone is on
+    file).
+
+3.6 Farmer profile (/(buyer)/farmer/[id].tsx)
+  - Hero cover, avatar, verified badge, story (read more / less), map preview,
+    specialty badges, full grid of that farmer's products.
+  - Bottom bar: **"Message" button → opens an in-app chat with the farmer**
+    (see 3.7); WhatsApp button → Linking out.
+
+3.7 Buyer ↔ Farmer messaging (**new in v2**)
+  - /(buyer)/chat.tsx — conversations list (FlatList of farmers the buyer has
+    talked to), shows latest message + unread badge per row, relative timestamps.
+  - /(buyer)/messages/[farmerId].tsx — chat detail with optimistic send,
+    bubble layout (mine left / theirs right), AsyncStorage-persisted via a
+    zustand store (store/messagesStore.ts). In dev mode the farmer auto-replies
+    after a short delay with a canned message; in production this is the place
+    to plug Supabase Realtime channels.
+
+3.8 Adopt-a-tree (**re-imagined in v2**)
+  - Promoted to the home feed (not buried in product detail).
+  - /(buyer)/adopt-tree.tsx hero + tree cards (olive, fig, banana, pomegranate)
+    with age + expected yield + annual price.
+  - **AI tree visualizer** — each card has a "See your tree" button that opens
+    a full-screen modal with a Spring/Summer/Autumn/Winter season selector. A
+    call is made to Replicate (flux-schnell by default; the version SHA in
+    lib/replicate.ts should be updated to the real one before shipping) using
+    EXPO_PUBLIC_REPLICATE_API_TOKEN. The image is polled until ready, then
+    rendered in the modal. If the token is missing, the fallback image is shown
+    along with a "Replicate not configured" notice so the screen is never empty.
+  - Regenerate button to re-roll the image with the same prompt.
+
+3.9 Pick-your-own (/(buyer)/pick-your-own.tsx)
+  - Cards of farms that allow on-site picking, with location, crops, and a
+    "Book a visit" CTA.
+
+3.10 Map (/(buyer)/map.tsx)
+  - Placeholder map with simulated farmer markers + a bottom-sheet farmer
+    preview. Production should wire react-native-maps (already a dep).
+
+
+4. FARMER EXPERIENCE
+--------------------
+
+4.1 Dashboard (/(farmer)/index.tsx)
+  - Greeting, avatar, **bell with unread badge → navigates to /(farmer)/alerts**.
+  - Three metric cards: orders today, sales today, rating.
+  - "Smart alerts" — pulled from the farmer_alerts table (or mocked in dev),
+    each card shows a message and a CTA (e.g., "5 kg tomato unsold → create
+    flash deal").
+  - Quick action grid: Add product, Orders, Earnings, Flash deal.
+  - Earnings chart preview.
+
+4.2 Add product (/(farmer)/add-product.tsx)
+  - Required-field validation pipeline (parseNumber helper, wholesale ≤ retail
+    guardrail, qty > 0).
+  - Multi-image picker (up to 3); first picked image is uploaded as image_url.
+  - Category chips, unit chips (kg / L / piece / package).
+  - Toggles: organic / self-pick allowed / adoptable.
+  - "Quick fill (demo)" button (Sparkles icon) — pulses + fills the form with
+    sample data so the demo flows quickly. The previous "voice input" UI was
+    a stub and has been honestly relabeled until real voice transcription is
+    wired (planned: Azure Speech-to-Text using the same Azure credentials).
+
+4.3 Products (/(farmer)/products.tsx)
+  - FlashList of the farmer's products with stock + price summary + edit CTA.
+
+4.4 Orders (/(farmer)/orders.tsx)
+  - List of incoming orders by buyer.
+
+4.5 Earnings (/(farmer)/earnings.tsx)
+  - Period tabs (Day / Week / Month).
+  - Big total card, "+23% vs prior period" badge.
+  - Sparkline chart.
+  - Recent transactions list (typed FarmerTransaction[]).
+
+4.6 Alerts (/(farmer)/alerts.tsx) — already wired to the bell on the dashboard.
+
+
+5. SHARED INFRASTRUCTURE
+------------------------
+
+5.1 Auth
+  - store/authStore.ts (zustand). Detects isDevMode → seeds dummy user.
+  - Real login uses Supabase signInWithOtp + verifyOtp.
+
+5.2 Data layer
+  - @tanstack/react-query 5.x for all server state.
+  - Every query hook returns explicit TypeScript types
+    (BuyerOrder, FarmerOrderRow, FarmerTransaction, Product, Farmer, Alert,
+    PriceAlert). NoInfer<T> required TypeScript ≥ 5.4; the project ships TS 5.6.
+  - In dev mode every hook short-circuits to constants/mockData.ts.
+
+5.3 Cart
+  - store/cartStore.ts. Persists nothing yet (intentional — single-session demo).
+    Exposes addItem, removeItem, updateQty, total(), savings(), itemsByFarmer()
+    so checkout can split orders.
+  - hooks/useCart.ts memoises the totals so screens never call total() on every
+    render (older bug).
+
+5.4 Messages
+  - store/messagesStore.ts persists conversations via AsyncStorage. Dev mode
+    auto-replies with a sample message. Production should swap the inner
+    storage with Supabase Realtime + a messages table.
+
+5.5 i18n (**new in v2**)
+  - lib/i18n.ts provides useT() and useLanguage().
+  - Two complete dictionaries: ar (default, Palestinian Arabic) and en.
+  - The picker lives in the profile screen; the choice persists via AsyncStorage.
+  - Known limitation: the app forces RTL layout (I18nManager.forceRTL(true) in
+    app/_layout.tsx). The language switch swaps text content but does not flip
+    the layout to LTR — that would require a full reload and a separate code
+    path. For the hackathon demo, English is rendered inside the RTL layout
+    (text is right-aligned). This is documented and intentional for now.
+
+5.6 TTS
+  - lib/tts.ts exposes useTTS(language, provider). Default provider is Azure
+    (sponsor); ElevenLabs is an alternative. The hook downloads the MP3 via
+    Azure's REST endpoint, writes it to the cache directory with the new
+    expo-file-system File/Paths API, then plays it via expo-av Audio.Sound.
+  - The Listen button on product detail shows a stop icon while playing and
+    falls back to a "Loading..." label during fetch.
+
+5.7 Image generation
+  - lib/replicate.ts wraps the Replicate predictions API. Polls until status
+    is succeeded with a 60s timeout. Currently scaffolded with flux-schnell;
+    swap the model version SHA before going live. The adopt-a-tree visualizer
+    is the only consumer today.
+
+5.8 Linking
+  - Phone / WhatsApp deeplinks across order-tracking and farmer profile use
+    Linking.canOpenURL + tel: / https://wa.me/ URIs with graceful "غير متاح"
+    fallbacks.
+
+5.9 Theme
+  - constants/colors.ts: Palestinian green (#2D5016 primary, #4A9B2F success,
+    #C8941A secondary), warm cream background (#FAF7F0).
+  - constants/spacing.ts: spacing scale {xs:4 sm:8 md:16 lg:24 xl:40},
+    radius scale, card shadow.
+  - constants/typography.ts: Cairo font weights 400/600/700.
+  - Cairo Google Font is loaded in app/_layout.tsx via @expo-google-fonts/cairo.
+
+
+5.10 Rwan's AI & Data Service (Python FastAPI, services/ai-service/)
+  - Independent HTTP service, *not* merged into the RN code. Run with
+    `uvicorn main:app --reload --port 8000` from services/ai-service/. Swagger
+    UI auto-generated at /docs.
+  - Nine endpoints, each with a DEMO fallback that works without any keys so
+    the hackathon demo never breaks:
+      POST /api/ai/chat                       (Claude, buyer or farmer role)
+      POST /api/voice/transcribe              (Azure Speech)
+      POST /api/voice/parse-product           (Claude → structured product)
+      POST /api/voice/parse-order             (Claude → cart items)
+      GET  /api/maps/nearby-farmers           (Haversine + Azure Maps travel time)
+      GET  /api/analytics/price-comparison    (market vs Fallahy + savings %)
+      GET  /api/analytics/price-ticker        (day-over-day direction)
+      GET  /api/analytics/price-trend         (full series for charts)
+      GET  /api/analytics/farmer-dashboard    (revenue + best sellers + demand alerts)
+  - Bundled data: farmers.json (6 real Palestinian/Jordanian farmers) +
+    prices.json (14-day history for 4 crops).
+  - Render-ready: render.yaml, Procfile, runtime.txt, DEPLOY.md.
+  - The RN app talks to it via the typed client at lib/aiService.ts, controlled
+    by EXPO_PUBLIC_AI_SERVICE_URL. Live integrations today:
+      • Buyer home: ✨ floating button → Claude chat modal (AIHelperModal.tsx).
+      • Buyer home: price ticker prefers the live /api/analytics/price-ticker.
+      • Product detail: live market vs Fallahy badge from /price-comparison.
+      • Farmer dashboard: estimated revenue + smart_alerts from /farmer-dashboard.
+      • Farmer add-product: "Quick fill" button calls /api/voice/parse-product.
+    Each falls back to the existing Supabase / mock path if her service is off,
+    so nothing crashes when EXPO_PUBLIC_AI_SERVICE_URL is unreachable.
+
+6. ENVIRONMENT VARIABLES (.env)
+-------------------------------
+
+EXPO_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=...
+
+# Dev shortcuts (never ship to production)
+EXPO_PUBLIC_DEV_MODE=true              # show dev role picker on launch
+EXPO_PUBLIC_DEV_AUTH_ROLE=buyer        # or 'farmer'; skips the picker entirely
+EXPO_PUBLIC_DEV_OTP_BYPASS=true        # accept "0000" as OTP in real auth
+
+# Sponsor integrations
+EXPO_PUBLIC_AZURE_SPEECH_KEY=...
+EXPO_PUBLIC_AZURE_SPEECH_REGION=eastus
+EXPO_PUBLIC_ELEVENLABS_API_KEY=...
+EXPO_PUBLIC_REPLICATE_API_TOKEN=...
+
+# Rwan's AI & Data Service (services/ai-service/)
+EXPO_PUBLIC_AI_SERVICE_URL=http://localhost:8000
+
+All sponsor integrations degrade gracefully when the key is empty: the feature
+is hidden (TTS button), shown with a clear "not configured" notice (tree
+visualizer), or silently falls back to the existing Supabase / mock path
+(Rwan's service when unreachable).
+
+
+7. DATA MODEL (Supabase, expected schema)
+-----------------------------------------
+
+profiles
+  id uuid pk, role text ('buyer' | 'farmer'), name text, farm_name text,
+  phone text, avatar_url text, city text, address text, is_verified bool,
+  farm_story text, specialty text[], location jsonb {latitude, longitude},
+  created_at timestamptz.
+
+products
+  id uuid pk, farmer_id uuid fk → profiles, name text, image_url text,
+  retail_price numeric, wholesale_price numeric, market_price numeric,
+  unit text, available int, harvest_date text, is_organic bool, is_fresh bool,
+  category text, origin text, savings_percent int,
+  is_self_pick bool, is_adoptable bool, created_at timestamptz.
+
+orders
+  id uuid pk, order_number text unique, buyer_id uuid, farmer_id uuid,
+  status text ('received'|'preparing'|'on_the_way'|'delivered'|'cancelled'),
+  total numeric, delivery_type text, payment_method text, address text,
+  estimated_arrival text, placed_at timestamptz.
+
+order_items
+  id uuid pk, order_id uuid fk → orders, product_id uuid, product_name text,
+  quantity int, price numeric, price_type text.
+
+farmer_alerts
+  id uuid pk, farmer_id uuid, type text ('warning'|'info'|'success'),
+  message text, action text, action_route text, is_read bool, created_at.
+
+price_alerts
+  id uuid pk, buyer_id uuid, product_name text,
+  target_price numeric, current_price numeric, status text, created_at.
+
+buyer_savings
+  buyer_id uuid pk, total_saved numeric, total_orders int, points int,
+  rank text.
+
+**Not yet in DB but planned**: a `messages` table (id, conversation_id, from_id,
+text, created_at) + `conversations` (id, buyer_id, farmer_id) for the in-app
+chat to graduate from AsyncStorage to multi-device.
+
+
+8. WHAT TO REVIEW
+-----------------
+
+When you read this back, please weigh in on:
+
+(a) Product polish — Are the adopt-a-tree + tree visualizer + TTS readouts
+    coherent with the rest of the app, or feature-bag-ish?
+(b) Trust & UX — Buyers chatting with farmers is now in-app *and* on WhatsApp.
+    Is that two-channel reality confusing? Should the in-app chat be the only
+    canonical surface?
+(c) Localisation — Is "RTL layout + English text" a defensible interim, or
+    should we ship a full LTR mode now?
+(d) Hackathon judging — Given the sponsors (Microsoft Azure, ElevenLabs,
+    Replicate), are we using each in a way that materially helps users, or
+    are any of them feeling tacked-on?
+(e) Farmer empathy — TTS exists for the buyer's product summary. Should it
+    also be available to farmers on the dashboard / alerts / earnings copy,
+    where low-literacy farmers are the actual primary audience?
+(f) Missing essentials — What feels conspicuously absent for a marketplace
+    that competes on freshness + price transparency?
+
+End of brief.

@@ -4,13 +4,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../constants/colors';
 
 interface AvatarProps {
-  uri: string;
+  uri?: string;
   size?: number;
   style?: object;
 }
 
 export default function Avatar({ uri, size = 50, style }: AvatarProps) {
-  const hasImage = uri && uri.length > 5;
+  const hasImage = !!uri && uri.length > 5;
 
   return (
     <View style={[{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden' }, style]}>

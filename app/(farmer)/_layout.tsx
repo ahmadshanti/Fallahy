@@ -14,7 +14,7 @@ const farmerTabs: { name: string; title: string; icon: IoniconsName; iconFocused
   { name: 'profile', title: 'حسابي', icon: 'person-outline', iconFocused: 'person' },
 ];
 
-const hiddenScreens = ['add-product', 'flash-deal', 'analytics', 'alerts', 'trees', 'pick-requests', 'chat-thread/[id]', 'earnings'];
+const hiddenScreens = ['add-product', 'flash-deal', 'analytics', 'alerts', 'trees', 'pick-requests', 'chat-thread/[id]', 'earnings', 'messages', 'messages/[buyerId]'];
 
 export default function FarmerLayout() {
   return (

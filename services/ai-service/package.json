@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "name": "fallahy-ai-service",
+  "description": "Python FastAPI service (Rwan). Not a JS package — this file exists only so Expo's CLI doesn't scan into it.",
+  "version": "1.0.0"
+}
