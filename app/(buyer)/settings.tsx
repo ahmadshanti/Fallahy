@@ -8,6 +8,7 @@ import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
+import { isDevMode } from '../../lib/devMode';
 
 const cities = ['رام الله', 'نابلس', 'الخليل', 'جنين', 'بيت لحم', 'طولكرم', 'قلقيلية', 'غزة', 'سلفيت', 'أريحا', 'طوباس', 'عمّان', 'إربد', 'الزرقاء'];
 
@@ -24,16 +25,18 @@ export default function SettingsScreen() {
     if (!buyerId) return;
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({ city, phone: whatsapp })
-        .eq('id', buyerId);
-      if (error) throw error;
+      if (!isDevMode) {
+        const { error } = await supabase
+          .from('users')
+          .update({ city, phone: whatsapp })
+          .eq('id', buyerId);
+        if (error) throw error;
+      }
       updateUser({ city, phone: whatsapp });
       Alert.alert('', 'تم حفظ الإعدادات');
       router.back();
-    } catch {
-      Alert.alert('خطأ', 'فشل في حفظ الإعدادات');
+    } catch (err: any) {
+      Alert.alert('خطأ', err?.message || 'فشل في حفظ الإعدادات');
     } finally {
       setSaving(false);
     }

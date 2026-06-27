@@ -19,6 +19,8 @@ import { useCartStore } from '../../store/cartStore';
 import { createOrder } from '../../lib/orders';
 import { getOrCreateConversation, sendMessage } from '../../lib/chat';
 import { sendNotification } from '../../lib/notifications';
+import { isDevMode } from '../../lib/devMode';
+import { useDevOrdersStore } from '../../store/devOrdersStore';
 
 export default function CheckoutScreen() {
   const router = useRouter();
@@ -31,6 +33,7 @@ export default function CheckoutScreen() {
   const [address, setAddress] = useState(user?.city || '');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const createDevOrder = useDevOrdersStore((s) => s.create);
 
   const total = getTotal();
   const farmerId = getFarmerId();
@@ -62,40 +65,55 @@ export default function CheckoutScreen() {
         sale_type: item.saleType,
       }));
 
-      const order = await createOrder({
-        buyer_id: buyerId,
-        farmer_id: farmerId,
-        total_price: total,
-        delivery_address: address.trim(),
-        notes: notes.trim() || undefined,
-        items: orderItems,
-      });
+      let orderId: string;
+      if (isDevMode) {
+        const devOrder = createDevOrder({
+          buyer_id: buyerId,
+          farmer_id: farmerId,
+          total_price: total,
+          delivery_address: address.trim(),
+          notes: notes.trim() || undefined,
+          items: orderItems.map((i, idx) => ({
+            ...i,
+            product_name: items[idx]?.product.name,
+          })),
+        });
+        orderId = devOrder.id;
+      } else {
+        const order = await createOrder({
+          buyer_id: buyerId,
+          farmer_id: farmerId,
+          total_price: total,
+          delivery_address: address.trim(),
+          notes: notes.trim() || undefined,
+          items: orderItems,
+        });
+        orderId = order.id;
 
-      // Send auto-message to farmer
-      try {
-        const itemsList = items.map((i) => `${i.product.name} x${i.quantity}`).join(', ');
-        const conv = await getOrCreateConversation(buyerId, farmerId, order.id);
-        await sendMessage(conv.id, buyerId, 'buyer', `طلب جديد: ${itemsList}`);
-      } catch {
-        // Non-critical, continue
-      }
-
-      // Send notification to farmer
-      try {
-        const farmerUserId = farmerId; // farmer_id in the farmers table
-        await sendNotification(
-          farmerUserId,
-          'new_order',
-          'طلب جديد',
-          `لديك طلب جديد بقيمة ${total.toFixed(2)} د.أ`,
-          { order_id: order.id }
-        );
-      } catch {
-        // Non-critical
+        // Auto-message + notification (real mode only — dev mode skips DB writes)
+        try {
+          const itemsList = items.map((i) => `${i.product.name} x${i.quantity}`).join(', ');
+          const conv = await getOrCreateConversation(buyerId, farmerId, orderId);
+          await sendMessage(conv.id, buyerId, 'buyer', `طلب جديد: ${itemsList}`);
+        } catch {
+          // Non-critical
+        }
+        try {
+          await sendNotification(
+            farmerId,
+            'new_order',
+            'طلب جديد',
+            `لديك طلب جديد بقيمة ${total.toFixed(2)} د.أ`,
+            { order_id: orderId }
+          );
+        } catch {
+          // Non-critical
+        }
       }
 
       clear();
-      router.replace(`/(buyer)/order-tracking/${order.id}`);
+      Alert.alert('تم', 'تم إرسال الطلب بنجاح');
+      router.replace('/(buyer)/orders');
     } catch (err: any) {
       console.error('Checkout error:', err);
       Alert.alert('خطأ', err?.message || 'تعذر إنشاء الطلب. حاول مرة أخرى.');

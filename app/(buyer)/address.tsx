@@ -8,6 +8,7 @@ import { colors } from '../../constants/colors';
 import { radius, spacing } from '../../constants/spacing';
 import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
+import { isDevMode } from '../../lib/devMode';
 
 const cities = ['رام الله', 'نابلس', 'الخليل', 'جنين', 'بيت لحم', 'طولكرم', 'قلقيلية', 'غزة', 'سلفيت', 'أريحا', 'طوباس', 'عمّان', 'إربد', 'الزرقاء'];
 
@@ -27,22 +28,21 @@ export default function AddressScreen() {
     }
     setSaving(true);
     try {
-      const fullAddress = [city, street, details].filter(Boolean).join('، ');
-      const { error } = await supabase
-        .from('users')
-        .update({ city, address_street: street, address_details: details })
-        .eq('id', buyerId);
-
-      if (error) {
-        // If columns don't exist yet, just update city
-        await supabase.from('users').update({ city }).eq('id', buyerId);
+      if (!isDevMode) {
+        const { error } = await supabase
+          .from('users')
+          .update({ city, address_street: street, address_details: details })
+          .eq('id', buyerId);
+        if (error) {
+          // Older schema: only `city` exists
+          await supabase.from('users').update({ city }).eq('id', buyerId);
+        }
       }
-
       updateUser({ city, address_street: street, address_details: details });
       Alert.alert('', 'تم حفظ العنوان بنجاح');
       router.back();
-    } catch {
-      Alert.alert('خطأ', 'فشل في حفظ العنوان');
+    } catch (err: any) {
+      Alert.alert('خطأ', err?.message || 'فشل في حفظ العنوان');
     } finally {
       setSaving(false);
     }

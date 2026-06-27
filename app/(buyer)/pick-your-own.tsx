@@ -21,6 +21,7 @@ import { getAllFarmers } from '../../lib/farmers';
 import { getProductsByFarmer } from '../../lib/products';
 import { createPickRequest, getPickRequestsByBuyer } from '../../lib/pickRequests';
 import { sendNotification } from '../../lib/notifications';
+import { isDevMode } from '../../lib/devMode';
 import { Farmer, Product, PickRequest } from '../../types';
 
 const TIME_SLOTS = [
@@ -125,26 +126,26 @@ export default function PickYourOwnScreen() {
 
     try {
       setSubmitting(true);
-      await createPickRequest({
-        buyer_id: buyerId,
-        farmer_id: selectedFarmer,
-        product_id: selectedProduct,
-        requested_date: selectedDate,
-        requested_time: selectedTime,
-        quantity: parseInt(quantity) || 1,
-      });
-
-      // Notify farmer
-      try {
-        await sendNotification(
-          selectedFarmer,
-          'pick_request',
-          'طلب قطف جديد',
-          'لديك طلب قطف جديد',
-          { product_id: selectedProduct }
-        );
-      } catch {
-        // Non-critical
+      if (!isDevMode) {
+        await createPickRequest({
+          buyer_id: buyerId,
+          farmer_id: selectedFarmer,
+          product_id: selectedProduct,
+          requested_date: selectedDate,
+          requested_time: selectedTime,
+          quantity: parseInt(quantity) || 1,
+        });
+        try {
+          await sendNotification(
+            selectedFarmer,
+            'pick_request',
+            'طلب قطف جديد',
+            'لديك طلب قطف جديد',
+            { product_id: selectedProduct }
+          );
+        } catch {
+          // Non-critical
+        }
       }
 
       Alert.alert('تم الإرسال', 'تم إرسال طلب القطف بنجاح');
@@ -155,15 +156,14 @@ export default function PickYourOwnScreen() {
       setQuantity('1');
       setProducts([]);
 
-      // Reload requests
-      if (buyerId) {
+      if (buyerId && !isDevMode) {
         const requests = await getPickRequestsByBuyer(buyerId);
         setMyRequests(requests);
       }
       setActiveTab('requests');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Pick request error:', err);
-      Alert.alert('خطأ', 'تعذر إرسال طلب القطف');
+      Alert.alert('خطأ', err?.message || 'تعذر إرسال طلب القطف');
     } finally {
       setSubmitting(false);
     }

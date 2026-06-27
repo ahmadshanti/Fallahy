@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { colors } from '../../constants/colors';
 import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
+import { isDevMode } from '../../lib/devMode';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -40,17 +41,19 @@ export default function ProfileScreen() {
         phone: phone.trim(),
         city: city.trim(),
       };
-      const { error } = await supabase
-        .from('users')
-        .update(updates)
-        .eq('id', buyerId);
-      if (error) throw error;
+      if (!isDevMode) {
+        const { error } = await supabase
+          .from('users')
+          .update(updates)
+          .eq('id', buyerId);
+        if (error) throw error;
+      }
       updateUser(updates);
       setEditing(false);
       Alert.alert('تم الحفظ', 'تم تحديث الملف الشخصي');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Profile save error:', err);
-      Alert.alert('خطأ', 'تعذر حفظ التعديلات');
+      Alert.alert('خطأ', err?.message || 'تعذر حفظ التعديلات');
     } finally {
       setSaving(false);
     }

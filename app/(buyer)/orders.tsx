@@ -15,6 +15,8 @@ import { colors } from '../../constants/colors';
 import { useAuthStore } from '../../store/authStore';
 import { getOrdersByBuyer } from '../../lib/orders';
 import { Order } from '../../types';
+import { isDevMode } from '../../lib/devMode';
+import { useDevOrdersStore } from '../../store/devOrdersStore';
 
 const FILTER_TABS = [
   { key: 'all', label: 'الكل' },
@@ -36,6 +38,7 @@ const STATUS_MAP: Record<string, { label: string; color: string; icon: string }>
 export default function OrdersScreen() {
   const router = useRouter();
   const { buyerId } = useAuthStore();
+  const devOrders = useDevOrdersStore((s) => s.orders);
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +52,11 @@ export default function OrdersScreen() {
     if (!buyerId) return;
     try {
       setLoading(true);
+      // In dev mode skip DB call (FK on buyer_id would just return empty anyway)
+      if (isDevMode) {
+        setOrders([]);
+        return;
+      }
       const data = await getOrdersByBuyer(buyerId);
       setOrders(data);
     } catch (err) {
@@ -58,7 +66,31 @@ export default function OrdersScreen() {
     }
   };
 
-  const filteredOrders = orders.filter((order) => {
+  // Merge dev-store orders with DB orders so demo-mode purchases show up
+  const mergedOrders: Order[] = isDevMode
+    ? [...devOrders.map((o) => ({
+        id: o.id,
+        buyer_id: o.buyer_id,
+        farmer_id: o.farmer_id,
+        status: o.status,
+        total_price: o.total_price,
+        payment_method: 'cash',
+        delivery_address: o.delivery_address,
+        notes: o.notes,
+        created_at: o.created_at,
+        order_items: o.items.map((it, idx) => ({
+          id: `${o.id}-${idx}`,
+          order_id: o.id,
+          product_id: it.product_id,
+          quantity: it.quantity,
+          unit_price: it.unit_price,
+          sale_type: it.sale_type,
+          products: { name: it.product_name || '' },
+        })),
+      } as Order)), ...orders]
+    : orders;
+
+  const filteredOrders = mergedOrders.filter((order) => {
     if (activeFilter === 'all') return true;
     if (activeFilter === 'active') {
       return ['pending', 'accepted', 'preparing', 'out_for_delivery'].includes(order.status);
