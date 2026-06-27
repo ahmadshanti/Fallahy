@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Image as RNImage, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Image as RNImage, ActivityIndicator, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import { Audio } from 'expo-av';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import { colors } from '../../constants/colors';
@@ -11,6 +12,7 @@ import { radius, spacing } from '../../constants/spacing';
 import { useAuthStore } from '../../store/authStore';
 import { addProduct, updateProduct } from '../../lib/products';
 import { supabase } from '../../lib/supabase';
+import { aiServiceConfigured, voiceParseProduct, voiceTranscribe } from '../../lib/aiService';
 
 const units = ['كغ', 'ليتر', 'حبة', 'طرد'];
 const saleTypes = ['مفرق', 'جملة', 'كلاهما'];
@@ -34,6 +36,112 @@ export default function AddProductScreen() {
   const [isOrganic, setIsOrganic] = useState(params.editOrganic === 'true');
   const [description, setDescription] = useState((params.editDescription as string) || '');
   const [saving, setSaving] = useState(false);
+
+  // Voice-to-product state
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState<string>('اضغط للتحدث');
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const animScale = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useRef<Animated.CompositeAnimation | null>(null);
+
+  useEffect(() => {
+    if (isRecording) {
+      pulseAnim.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(animScale, { toValue: 1.3, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(animScale, { toValue: 1, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        ])
+      );
+      pulseAnim.current.start();
+    } else {
+      pulseAnim.current?.stop();
+      Animated.timing(animScale, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+    }
+  }, [isRecording, animScale]);
+
+  useEffect(() => {
+    return () => {
+      recordingRef.current?.stopAndUnloadAsync().catch(() => undefined);
+    };
+  }, []);
+
+  const applyParsedProduct = async (text: string) => {
+    setVoiceStatus('جاري الفهم...');
+    try {
+      const parsed = await voiceParseProduct(text);
+      if (parsed.name) setName(parsed.name);
+      if (parsed.price != null) {
+        setRetailPrice(String(parsed.price));
+        if (!wholesalePrice) setWholesalePrice(String(Number((parsed.price * 0.75).toFixed(2))));
+      }
+      if (parsed.quantity != null) setQuantity(String(parsed.quantity));
+      Alert.alert('تم', 'تم تعبئة الحقول من الصوت');
+      setVoiceStatus('اضغط للتحدث');
+    } catch (err: any) {
+      Alert.alert('خطأ في الفهم', err?.message || 'تعذّر فهم الجملة');
+      setVoiceStatus('اضغط للتحدث');
+    }
+  };
+
+  const startRecording = async () => {
+    if (!aiServiceConfigured) {
+      // Demo fallback when the AI backend isn't running
+      setVoiceStatus('جاري المعالجة...');
+      setIsProcessing(true);
+      await applyParsedProduct('ضيف بندورة بلدية كيلو بثلاث شيكل مية وخمسين كيلو متوفر');
+      setIsProcessing(false);
+      return;
+    }
+    try {
+      const perm = await Audio.requestPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('تنبيه', 'يرجى السماح بالوصول للميكروفون');
+        return;
+      }
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const rec = new Audio.Recording();
+      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await rec.startAsync();
+      recordingRef.current = rec;
+      setIsRecording(true);
+      setVoiceStatus('جاري التسجيل... اضغط لإيقاف');
+    } catch (err: any) {
+      Alert.alert('خطأ', err?.message || 'تعذّر بدء التسجيل');
+    }
+  };
+
+  const stopRecording = async () => {
+    const rec = recordingRef.current;
+    if (!rec) return;
+    setIsRecording(false);
+    setIsProcessing(true);
+    setVoiceStatus('جاري التحويل لنص...');
+    try {
+      await rec.stopAndUnloadAsync();
+      const uri = rec.getURI();
+      recordingRef.current = null;
+      if (!uri) { setVoiceStatus('اضغط للتحدث'); return; }
+      const t = await voiceTranscribe(uri, 'audio/x-m4a');
+      if (!t.text) {
+        Alert.alert('تنبيه', 'لم نسمعك بوضوح، حاول مرة ثانية');
+        setVoiceStatus('اضغط للتحدث');
+        return;
+      }
+      await applyParsedProduct(t.text);
+    } catch (err: any) {
+      Alert.alert('خطأ', err?.message || 'تعذّر تحويل الصوت');
+      setVoiceStatus('اضغط للتحدث');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleVoice = async () => {
+    if (isProcessing) return;
+    if (isRecording) await stopRecording();
+    else await startRecording();
+  };
 
   const pickImage = async (fromCamera: boolean) => {
     try {
@@ -147,6 +255,23 @@ export default function AddProductScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        {/* Voice-to-product */}
+        <View style={styles.voiceCard}>
+          <View style={styles.voiceCardText}>
+            <Text style={styles.voiceCardTitle}>إضافة بالصوت</Text>
+            <Text style={styles.voiceCardSubtitle}>{voiceStatus}</Text>
+          </View>
+          <TouchableOpacity onPress={handleVoice} disabled={isProcessing} activeOpacity={0.8}>
+            <Animated.View style={[styles.voiceMic, isRecording && styles.voiceMicActive, { transform: [{ scale: animScale }] }]}>
+              {isProcessing ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons name={isRecording ? 'stop' : 'mic'} size={24} color="#FFFFFF" />
+              )}
+            </Animated.View>
+          </TouchableOpacity>
+        </View>
+
         {/* Image */}
         <Text style={styles.label}>صورة المنتج</Text>
         <TouchableOpacity style={styles.imagePicker} onPress={showImageOptions}>
@@ -279,4 +404,24 @@ const styles = StyleSheet.create({
   toggleSwitchOn: { backgroundColor: colors.primary },
   toggleThumb: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF' },
   toggleThumbOn: { alignSelf: 'flex-end' },
+  voiceCard: {
+    flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#E8F5E1', borderRadius: radius.xl,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  voiceCardText: { flex: 1, marginEnd: spacing.md },
+  voiceCardTitle: {
+    fontFamily: 'Cairo_700Bold', fontSize: 15, color: colors.textPrimary,
+    textAlign: 'right', writingDirection: 'rtl',
+  },
+  voiceCardSubtitle: {
+    fontFamily: 'Cairo_400Regular', fontSize: 12, color: colors.textMuted,
+    textAlign: 'right', writingDirection: 'rtl', marginTop: 2,
+  },
+  voiceMic: {
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
+  },
+  voiceMicActive: { backgroundColor: '#E63946' },
 });

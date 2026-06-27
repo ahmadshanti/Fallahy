@@ -198,6 +198,32 @@ export default function BuyerHome() {
           </View>
         </LinearGradient>
 
+        {/* Featured tiles — Adopt a tree + Pick your own */}
+        <View style={styles.featureTilesRow}>
+          <TouchableOpacity
+            style={styles.featureTile}
+            onPress={() => router.push('/(buyer)/adopt-tree')}
+            activeOpacity={0.85}
+          >
+            <View style={styles.featureTileIcon}>
+              <Ionicons name="leaf" size={22} color={colors.primary} />
+            </View>
+            <Text style={styles.featureTileTitle}>تبنّى شجرة</Text>
+            <Text style={styles.featureTileSubtitle}>شاهد شجرتك بكل موسم</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.featureTile, styles.featureTileGold]}
+            onPress={() => router.push('/(buyer)/pick-your-own')}
+            activeOpacity={0.85}
+          >
+            <View style={[styles.featureTileIcon, { backgroundColor: '#FFF3D6' }]}>
+              <Ionicons name="basket" size={22} color={colors.secondary} />
+            </View>
+            <Text style={styles.featureTileTitle}>اقطف بنفسك</Text>
+            <Text style={styles.featureTileSubtitle}>زر المزرعة بنفسك</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Most Requested Products */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -373,6 +399,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 10,
+  },
+  featureTilesRow: {
+    flexDirection: 'row-reverse',
+    paddingHorizontal: 16,
+    gap: 12,
+    marginBottom: 20,
+  },
+  featureTile: {
+    flex: 1,
+    backgroundColor: '#E8F5E1',
+    borderRadius: 16,
+    padding: 14,
+    alignItems: 'flex-end',
+    minHeight: 110,
+    justifyContent: 'space-between',
+  },
+  featureTileGold: { backgroundColor: '#FFF8E7' },
+  featureTileIcon: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 8,
+  },
+  featureTileTitle: {
+    fontFamily: 'Cairo_700Bold', fontSize: 15, color: colors.textPrimary,
+    textAlign: 'right', writingDirection: 'rtl',
+  },
+  featureTileSubtitle: {
+    fontFamily: 'Cairo_400Regular', fontSize: 11, color: colors.textMuted,
+    textAlign: 'right', writingDirection: 'rtl', marginTop: 2,
   },
   section: {
     marginBottom: 20,
