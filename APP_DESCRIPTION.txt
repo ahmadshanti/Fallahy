@@ -1,0 +1,810 @@
+================================================================================
+  من الأرض  (Min Al-Ard  —  "From The Land")
+  Complete app description for Gemini  —  every screen, button, and behavior
+================================================================================
+
+This document is written so a vision-and-text LLM can read it once and form an
+accurate mental picture of what every screen looks like and how every button
+behaves. It is not marketing — it is a literal inventory.
+
+
+────────────────────────────────────────────────────────────────────────────────
+0.  WHAT THE APP IS  (one paragraph)
+────────────────────────────────────────────────────────────────────────────────
+
+من الأرض is an Arabic-first, right-to-left iOS + Android marketplace that
+connects Palestinian families directly to local farmers. A buyer sees fresh
+produce + live market vs. farm prices, places an order with a tap, can adopt
+a real fruit tree and see AI-generated photos of it in every season, and can
+chat with the farmer or an in-app Claude assistant. A farmer dictates new
+products by voice (no typing needed), gets an AI revenue forecast and smart
+alerts, manages orders, and tracks earnings. Visual identity is olive green
++ cream + a Cairo Arabic display font, with a gold accent for premium /
+seasonal touches.
+
+Brand colors
+  primary       #2D5016  (deep olive green)
+  primaryDark   #1A3A0A
+  primaryLight  ~#98C27B
+  secondary     mustard/gold
+  success       leaf green
+  surface       white
+  surfaceDim    #F1F5F9
+  background    cream-tinted
+  AI-accent     #7C3AED  (purple — used on every AI-powered surface)
+
+Typography
+  All text uses the Cairo family loaded from Google Fonts:
+    Cairo_400Regular    body
+    Cairo_600SemiBold   labels, buttons
+    Cairo_700Bold       headings, prices
+  RTL is forced via I18nManager.forceRTL(true). Flex layouts use
+  flexDirection: 'row-reverse' so visual order matches reading order.
+
+Tech stack (so the layout reasoning makes sense)
+  Frontend     Expo SDK 54, React Native 0.81, expo-router v6, zustand,
+               @tanstack/react-query
+  Backend      Supabase (Postgres + auth + storage + RLS + realtime)
+  AI service   FastAPI on Render — 9 endpoints (services/ai-service/)
+  Image gen    Replicate flux-schnell  (lib/replicate.ts)
+  LLM          Anthropic Claude (in the AI service)
+  Voice        Azure Speech-to-Text  (in the AI service)
+  Maps         Azure Maps with Haversine fallback
+  Icons        @expo/vector-icons (Ionicons family throughout)
+
+
+────────────────────────────────────────────────────────────────────────────────
+1.  APP LAUNCH FLOW
+────────────────────────────────────────────────────────────────────────────────
+
+Native splash → app/_layout.tsx mounts → app/index.tsx decides where to go:
+
+  • If EXPO_PUBLIC_DEV_MODE=true and not logged in → /(auth)/dev-role
+  • Else not logged in                            → /(auth)/onboarding
+  • Logged in, role=farmer                        → /(farmer)
+  • Logged in, role=buyer                         → /(buyer)
+
+There's also a designed splash screen at /(auth)/splash.tsx (logo + "من الأرض"
+fade-in over a 800ms timer on a deep-green background) that's used when the
+in-app splash is wanted instead of jumping straight to onboarding.
+
+
+────────────────────────────────────────────────────────────────────────────────
+2.  AUTH GROUP   /(auth)
+────────────────────────────────────────────────────────────────────────────────
+
+────  2.1  /(auth)/dev-role.tsx  —  Dev role picker  ────
+Visible only when EXPO_PUBLIC_DEV_MODE=true. Cream background.
+
+Layout (top→bottom, centered):
+  • Round green leaf icon, 84×84, inside a soft-green circle
+  • Title       "الفلاحي — وضع التطوير"  (Cairo Bold 24)
+  • Subtitle    "اختر دوراً للدخول السريع بدون تسجيل"  (muted 14)
+  • TILE 1 — full-width white card, rounded-xl, gray border
+      Right side: green cart-icon circle (soft green bg)
+      Center text right-aligned:
+        title    "الدخول كمشتري"
+        sub      "تصفّح المنتجات، اطلب من المزارعين"
+      Left side: chevron-back arrow (muted)
+  • TILE 2 — identical structure
+      Right side: gold leaf-icon circle (FFF3D6 bg)
+      title  "الدخول كمزارع"
+      sub    "أضف منتجاتك، اعرض أرباحك"
+  • Footnote at bottom: muted 12px Arabic warning that real OTP is disabled
+    while EXPO_PUBLIC_DEV_MODE is on.
+
+Tapping either tile bypasses Supabase auth, fills authStore with a dummy
+user (UUID …001 for buyer, …002 for farmer), and redirects to the
+respective root.
+
+────  2.2  /(auth)/onboarding.tsx  ────
+Three-slide horizontal pager (Dimensions.get('window').width per slide,
+pagingEnabled, no scrollbar). Each slide is centered:
+  • Large Ionicon (storefront / leaf / people), 80px, primary color
+  • Title  Cairo Bold 28
+  • Body   Cairo Regular 16, line-height 26, centered
+Bottom section:
+  • Three dots — the active one is 24px-wide pill, others are 8×8 circles
+  • Full-width primary Button (large size) — label is "التالي" on slides 1-2
+    and "ابدأ الآن" on slide 3. On last slide → router.replace('/(auth)/role-select').
+
+Slide content:
+  1. icon storefront-outline | "المشكلة" | "البندورة بالسوق بـ 5 شيكل... وعند المزارع بـ 3 شيكل"
+  2. icon leaf-outline       | "الحل"     | "من الأرض يربطك مباشرة بالمزارع القريب منك"
+  3. icon people-outline     | "انضم إلينا" | "آلاف المزارعين والمستهلكين على المنصة"
+
+────  2.3  /(auth)/role-select.tsx  ────
+After onboarding. Centered cream screen.
+  • Logo image — assets/icon.png at 180×180, rounded 24
+  • Title    "أهلاً بك في من الأرض"  (Bold 28)
+  • Subtitle "من الأرض لبيتك مباشرة"  (Regular 16, muted)
+Bottom (paddingBottom: spacing.xl):
+  • Primary full-width Button "إنشاء حساب جديد" → /(auth)/register-buyer
+  • Spacer
+  • Outlined full-width Button "تسجيل الدخول" → /(auth)/login
+
+────  2.4  /(auth)/login.tsx  ────
+Phone-number sign-in. Top header with back arrow.
+  • Title "تسجيل الدخول" + subtitle
+  • Country-code picker dropdown (default +970 Palestine, +962 Jordan listed)
+    opens a modal of all Arab-world country codes
+  • Phone TextInput with numeric keyboard, right-aligned in RTL
+  • Primary Button "إرسال رمز التحقق"
+  Once OTP is sent:
+  • 4-digit OTP boxes (4 separate TextInputs autofocusing right→left)
+  • Resend link with 60-second countdown
+  Validation: on success calls supabase.auth.verifyOtp, then
+  loginAsBuyer/loginAsFarmer in authStore, then router.replace.
+
+────  2.5  /(auth)/register-buyer.tsx  ────
+Four-step wizard with progress dots at top.
+  Step 1: Optional avatar — circular dashed dropzone, tap → ImagePicker
+  Step 2: Full name TextInput
+  Step 3: Phone TextInput (re-uses country code picker)
+  Step 4: City picker (dropdown of 14 Palestinian + Jordanian cities)
+Bottom: "التالي" button per step, "إنشاء الحساب" on step 4.
+Calls supabase.auth.signInAnonymously + insert into users table.
+
+────  2.6  /(auth)/register-farmer.tsx  ────
+Single-form farmer registration. Top header with back arrow.
+Fields (vertical stack):
+  • Input "اسم المزرعة"
+  • Input "اسم المالك"
+  • Input "المدينة"
+  • Specialty chips: 4 toggle-chips ['خضار','فواكه','زيوت','أعشاب'] —
+    flexDirection: 'row-reverse', flexWrap, gap 8. Selected = green fill,
+    unselected = green outline.
+  • Outlined upload-document Button (changes label after image picked)
+  • Primary "تسجيل المزرعة" Button (disabled until farmName + ownerName)
+Inserts into `farmers` table with user_id from anonymous auth.
+
+
+────────────────────────────────────────────────────────────────────────────────
+3.  BUYER GROUP   /(buyer)   —   bottom-tab navigator (5 tabs)
+────────────────────────────────────────────────────────────────────────────────
+
+Tab bar (all tabs RTL, 85px iOS height, white bg with subtle top shadow):
+  index    home-outline    "الرئيسية"  (home)
+  explore  search-outline  "تصفح"      (browse)
+  trees    leaf-outline    "أشجاري"    (my trees)
+  chat     chatbubble-out  "دردشاتي"   (my chats)
+  profile  person-outline  "حسابي"     (my account)
+
+Hidden routes (no tab, reachable only via push):
+  product/[id], farmer/[id], cart, checkout, orders, order-tracking/[id],
+  map, pick-your-own, chat-thread/[id], adopt-tree, alerts, address, settings,
+  messages/new, messages/[farmerId]
+
+────  3.1  /(buyer)/index.tsx   "الرئيسية"   ────
+ScrollView, top→bottom:
+
+  TOP BAR (sticky-feeling, paddingTop 50)
+    Right side:  Cart icon button — round 44px white circle. If cart has items,
+                 a red badge with item count appears top-right.
+    Center:      Greeting "مرحبا، {full_name|ضيف}" + below that an icon-row
+                 "📍 {city|حدد موقعك}" in 12px muted text.
+    Left side:   Notifications bell — same 44px round button, red badge with
+                 unread count.
+
+  LIVE PRICE TICKER  (only renders when usePriceTicker has data)
+    White rounded card, mx-16, height 36, hosts a horizontal ScrollView.
+    Each item:  crop name (Cairo SemiBold 12) + price (Cairo Bold 13, primary)
+                + trending-up/down/flat arrow (red/green/muted).
+    Tries Rwan's /api/analytics/price-ticker first, falls back to Supabase
+    distinct-product list with flat arrows.
+
+  HERO BANNER  (mx-16, rounded-16, 140px min height)
+    LinearGradient diagonal — primary → primaryDark.
+    Right column (content): Bold 22 "من المزرعة إلى بيتك", subtitle 13 "منتجات
+    طازجة وعضوية مباشرة من المزارعين", then a white pill button
+    "تصفح المنتجات ←" → /(buyer)/explore.
+    Left column: a faded leaf icon (80px, opacity 0.15).
+
+  FEATURE TILES ROW  (paddingHorizontal 16, gap 12, marginBottom 20)
+    Two equal-width tiles, min-height 110, alignItems: 'flex-end' (RTL):
+    TILE A (light-green bg #E8F5E1):
+      icon "leaf" in a white circle (40×40)
+      "تبنّى شجرة"  Cairo Bold 15
+      "شاهد شجرتك بكل موسم"  Cairo Regular 11 muted
+      → /(buyer)/adopt-tree
+    TILE B (light-gold bg #FFF8E7):
+      icon "basket" in a soft-gold circle (#FFF3D6)
+      "اقطف بنفسك"
+      "زر المزرعة بنفسك"
+      → /(buyer)/pick-your-own
+
+  SECTION "الأكثر طلبا"
+    Header: right-aligned title + left "عرض الكل" link → /(buyer)/explore
+    INVERTED horizontal FlatList of product cards (160×200, white, rounded-12):
+      • Top: 120px image OR a placeholder square with image-outline icon
+      • Top-right overlay: "عضوي" green pill with leaf icon (if is_organic)
+      • Bottom-left overlay: round +-icon FAB that addItem(product, 1, 'retail')
+      • Below image (padding 10, alignItems flex-end):
+        Bold 13 product name (1 line)
+        Regular 11 muted farmer name
+        Bold 14 primary price "{retail_price.toFixed(2)} د.أ"
+    Tap card → /(buyer)/product/{id}
+    Loading: small spinner.  Empty: basket-outline icon + "لا توجد منتجات حاليا".
+
+  SECTION "مزارعون قريبون"
+    Same inverted horizontal FlatList, card 140×~160:
+      • 56px round avatar (placeholder = person icon)
+      • If is_verified: small checkmark-circle bottom-right of avatar
+      • Bold 13 farm_name
+      • muted "📍 city" row
+      • Pill button "زيارة" → /(buyer)/farmer/{id}
+    Tap card OR pill → /(buyer)/farmer/{id}.
+
+  FLOATING AI CHATBOT BUTTON  (position absolute, bottom 24, left 20)
+    58×58 round purple #7C3AED with elevation. Sparkles icon, white.
+    Tap → opens AIHelperModal with role='buyer'.
+    Calls Rwan's /api/ai/chat with conversation history.
+
+────  3.2  /(buyer)/explore.tsx   "تصفح"   ────
+ScrollView:
+  • Auto-focused search bar — white pill input with leading search icon
+  • CategoryFilter component — horizontal ScrollView of circular icon+label
+    chips (الكل / خضار / فواكه / زيوت), each ~70px wide
+  • Retail/Wholesale toggle: two segmented buttons "مفرق" / "جملة"
+  • Filter pills: "عضوي فقط" toggle + "متوفر الآن" toggle
+  • FlashList grid 2-column of product cards (same shape as home carousel
+    but full width / 2)
+
+────  3.3  /(buyer)/product/[id].tsx   ────
+Full-screen ScrollView:
+
+  Hero image (full width, 320px tall) with a top-→-down dark gradient overlay.
+  Top overlay:  back-arrow (right) + share + favorite (left) — all white 44px
+                round buttons with subtle shadow.
+  Bottom of image: a "قُطف اليوم / عضوي / فلسطيني المنشأ" pill row.
+
+  Content section (padding 16):
+    Bold 22 product name + right-aligned "{farm_name} · {city}" link →
+      /(buyer)/farmer/{farmer_id}
+    Retail/Wholesale segmented toggle (only when both prices exist)
+    PRICE ROW (row-reverse): big "{price.toFixed(2)} د.أ" + "/unit" muted
+
+    LIVE PRICE COMPARE CARD  (rendered only when AI service returns data)
+      Light-green #F0FDF4 box, rounded 12, padding 12:
+        Line 1: "₪{market.toFixed(2)}" (strikethrough, muted)  +  "سعر السوق"
+        Line 2: "₪{fallahy.toFixed(2)}" (bold success)         +  "من الأرض"
+        Saved-pill (green, white text): "📉 وفّر N%"
+      Source: /api/analytics/price-comparison
+
+    DESCRIPTION block (if product.description exists)
+    QUANTITY stepper — round - / numeric / + buttons
+    Two action buttons (full width):
+      Primary "أضف للسلة" → useCartStore.addItem
+      Outlined "تواصل مع المزارع" → /(buyer)/messages/{farmer_id}
+
+────  3.4  /(buyer)/cart.tsx   ────
+List + summary. Header with back arrow + "السلة" title.
+Each cart row (white card, padding 12, row-reverse):
+  60×60 product image | name + farmer + price/unit + retail/wholesale chip
+  Right side: QuantityStepper. Tap trash icon to removeItem.
+Sticky bottom CTA bar:
+  Subtotal big "{total} د.أ" + green "Saved: …" text
+  Primary "اذهب للدفع" → /(buyer)/checkout
+Empty state: cart-outline icon + "سلتك فارغة" + button to /(buyer)/explore.
+
+────  3.5  /(buyer)/checkout.tsx   ────
+Stacked sections:
+  • Order summary — list of items, totals (subtotal, delivery 0, total)
+  • Delivery address — TextInput pre-filled with user.city, "Edit" link →
+    /(buyer)/address
+  • Payment method — radio rows: cash on delivery (default), wallet (disabled
+    placeholder)
+  • Notes TextInput (multiline, optional)
+  • Bottom Primary "تأكيد الطلب" Button (large, loading state)
+On confirm:
+  • In dev mode → useDevOrdersStore.create() + redirect to /(buyer)/orders
+  • In real mode → createOrder() + auto-message farmer + push notification
+
+────  3.6  /(buyer)/orders.tsx   ────
+Top filter tabs (segmented): "الكل / جارية / مكتملة / مرفوضة"
+List of order cards (white, rounded-12, padding 14):
+  Header row: status pill (color-coded) on right + order id + date on left
+  Body: small farmer avatar + farm_name + city
+  Items: max 3 shown, each "{name} ×{qty}"
+  Footer: total price + chevron-back → /(buyer)/order-tracking/{id}
+In dev mode, merges devOrdersStore at the top of the list.
+
+────  3.7  /(buyer)/order-tracking/[id].tsx   ────
+Vertical stepper using OrderStatusStep component:
+  Steps: pending → accepted → preparing → out_for_delivery → delivered
+  Each step: circle (filled green if past/current, gray if future)
+             connected to next by a vertical line (green if past)
+             title + timestamp
+Below the stepper:
+  • Order summary card (same items list as orders.tsx)
+  • Farmer info bar with avatar, "اتصل" and "واتساب" round icon buttons
+  • If status==pending, a "إلغاء الطلب" outlined button
+
+────  3.8  /(buyer)/trees.tsx   "أشجاري"   ────
+Top: page title "أشجاري" (Bold 24)
+Toggle row: pill segmented control with two tabs:
+  "الأشجار المتاحة"   (available)
+  "أشجاري المتبناة"   (adopted)
+
+Available trees (fetched via getAllTrees) — FlatList of tree cards:
+  Card structure (white, padding 12, marginBottom 12):
+    Left: 120×150 image (placeholder = leaf icon)
+    Right column:
+      Bold 16 tree_type
+      Detail chips row (gap 6): age "📅 {N} سنة" + season "☀️ {productionSeason}"
+      "📍 {farm_name} - {city}"  row
+      Price row: big "{annual_price} د.أ/سنة" + primary pill button
+                 "تبنّى هذه الشجرة" (full width on small screens)
+      "متبقي: N شجرة" small muted line
+
+  Tap "تبنّى" → opens ADOPT NAMING MODAL (overlay, white card, rounded-20):
+    Title "تبنّى شجرة"
+    Subtitle "{tree_type} - {price} د.أ/سنة"
+    TextInput "اختر اسما للشجرة" (placeholder "مثال: شجرتي الأولى")
+    Bottom row: outlined "إلغاء"  +  primary "تأكيد التبني"
+  On confirm:
+    • dev mode → useDevAdoptedTreesStore.adopt
+    • real mode → adoptTree() insert into `adopted_trees`
+
+Adopted trees tab — FlatList of adopted cards (TouchableOpacity):
+  Card (row-reverse):
+    Left: 100×100 tree image
+    Right column:
+      Status pill (green "نشطة" / red "منتهية" / gold "قيد المراجعة")
+      Bold 16 custom_name (the user's nickname)
+      Regular 13 tree_type
+      "📍 farm_name - city" muted
+      "تاريخ التبني: {date}"
+      Purple hint badge: "✨ اضغط لعرض الصور بالذكاء الاصطناعي"
+  Tap card → AI PHOTO MODAL (slide-up):
+    Header: close X (right) + custom_name + tree_type
+    4:5 framed image area:
+      while loading: spinner + "الذكاء الاصطناعي يولّد الصورة..."
+      success: full-bleed Replicate-generated image
+      error: muted overlay banner with the error
+    "اختر الموسم" label, then 4 equal pill buttons:
+      🌸 الربيع     ☀️ الصيف     🍂 الخريف     ❄️ الشتاء
+      Active = primary fill white text. Inactive = outline.
+    Bottom "🔄 إعادة التوليد" button (full-width, outlined)
+  Calls generateTreeImage(treeType, season) from lib/replicate.ts.
+
+  Empty: heart-outline icon + "لم تتبنَّ أي شجرة بعد" + primary button to
+  switch to "available" tab.
+
+────  3.9  /(buyer)/adopt-tree.tsx   ────
+Reached from the "تبنّى شجرة" tile on home.
+SafeAreaView with header (back arrow + "تبنّى شجرة" title + lang toggle
+ar/en in top-left).
+Scroll content:
+  Subtitle paragraph in current language.
+  4 hardcoded heritage trees (zaytun, tin, mawz, rumman) PLUS any
+  product flagged is_adoptable, all rendered as cards:
+    Card: image 120×150 + name + age + price/yr + yield text
+          + outlined "تصوّر" button
+  Tap "تصوّر" → opens season-picker modal (same look as 3.8) and calls
+  Replicate generateTreeImage. The screen also has a Regenerate button.
+
+────  3.10  /(buyer)/pick-your-own.tsx   ────
+Two tabs: "طلب جديد" (new request) and "طلباتي" (my requests).
+New request tab — vertical form:
+  • Farmer dropdown (searchable list of all farmers)
+  • Once farmer chosen → Product dropdown auto-loads their products
+  • Date chips row (next 7 days, formatted as "الجمعة 12 آب")
+  • Time chips row (8am/10am/12pm/2pm/4pm)
+  • Quantity TextInput (numeric, default 1)
+  • Primary "إرسال طلب القطف" full-width Button (disabled until all fields)
+My requests tab — list cards: product image + name + farmer + date/time +
+status pill ("قيد المراجعة" / "تمت الموافقة" / "مرفوض").
+
+────  3.11  /(buyer)/map.tsx   ────
+Full-screen flat-color map placeholder (E8F0E2 mint background) with:
+  • Big "خريطة تفاعلية" + sub "سيتم عرض مواقع المزارعين هنا" centered
+  • Farmer markers absolutely positioned around the placeholder
+    (location-pin icon + tiny white-bg label with farm_name).
+  • Top controls: round white back-arrow (right) + "موقعي" pill (left)
+  • CategoryFilter (الكل / خضار / فواكه / زيوت) horizontal scroll
+  • Bottom-right small purple pill: "✨ Azure Maps" or "حساب المسافات"
+    badge — tells you whether the data came from Rwan's
+    /api/maps/nearby-farmers (with Azure) or the Haversine fallback.
+  • Bottom sheet (always visible when a farmer is selected): avatar
+    + farm_name + distance_km + primary "طلب الآن" → /(buyer)/farmer/{id}
+
+────  3.12  /(buyer)/farmer/[id].tsx   ────
+Public profile of one farmer.
+Hero: 220px tall image (farm image with dark gradient overlay) + round white
+back arrow top-right.
+Below the hero (white, lifted by negative margin -30):
+  • Round 80px avatar centered, with verified-badge if is_verified
+  • Bold 22 farm_name + city
+  • About paragraph
+  • Two pills row:
+    Primary "مراسلة" → /(buyer)/messages/{id}   (instant zustand thread)
+    WhatsApp "واتساب" → opens https://wa.me/{whatsapp_number}
+  Tab strip: "المنتجات" / "الأشجار للتبني" / "صور المزرعة"
+  Each tab renders an inverted horizontal FlatList of cards matching the
+  same product / tree card shapes from elsewhere in the app.
+
+────  3.13  /(buyer)/messages/new.tsx   ────
+Full-screen modal-ish list. Top: back-arrow + "محادثة جديدة" title.
+Search bar: TextInput "ابحث باسم المزارع أو المزرعة..." (autoFocus, right-aligned).
+List below, two grouped sections:
+  Header "مزارعون اشتريت منهم" — only farmers the user has ordered from
+    Each row: row-reverse, avatar 48 + farm_name + small "اشتريت منه" badge
+              + city muted + chevron-back
+  Header "كل المزارعين" — everyone else, same row layout
+Tap any row → router.replace('/(buyer)/messages/{farmer.id}')
+Empty state: search-outline icon + "لا يوجد مزارع مطابق"
+
+────  3.14  /(buyer)/messages/[farmerId].tsx   ────
+Chat thread, KeyboardAvoidingView. Header (border-bottom):
+  back-arrow + farmer avatar + farm_name (right-aligned, truncated)
+FlatList of messages (auto-scrolls to bottom):
+  My message: aligned to flex-start (visually left in RTL), green bubble
+              max-width 75%, white text, rounded with bottom-left corner sharp
+  Their message: aligned to flex-end (right), surface bubble, dark text,
+                 rounded with bottom-right sharp
+Bottom input bar (sticky):
+  Round primary send button (right) + multiline TextInput "اكتب رسالة..."
+Stores messages in useMessagesStore (zustand) so they appear instantly.
+
+────  3.15  /(buyer)/chat.tsx   "دردشاتي"   ────
+Top page header: title "الدردشة" (right) + create-outline pencil icon button
+(left) → /(buyer)/messages/new
+FlatList of rows, with two kinds:
+  AI HELPER ROW (always first):
+    Purple-tinted card. Left: round purple sparkle-icon avatar.
+    Right column:
+      "AI" badge pill + name "المساعد الذكي"
+      muted last line: "اسألني عن طلبك، المنتجات، أو كيف تستخدم التطبيق"
+    Tap → opens AIHelperModal (role='buyer')
+  FARMER CONVERSATION ROWS:
+    Avatar + farm_name + last message text (1 line) + relative time
+    "قبل 5 د"/"قبل ساعة"/"قبل يومين"
+    Unread badge (small red circle with count) if applicable
+Empty for AI when service not configured (still shows the row to demo).
+
+────  3.16  /(buyer)/profile.tsx   "حسابي"   ────
+ScrollView:
+  Hero section (cream background):
+    Centered round 100px avatar (placeholder = soft-green initials circle)
+    Bold 22 full_name
+    Muted 14 "📍 city"  +  small "تعديل" link → starts edit mode
+  Stats row (3 metric cards: total orders / month savings / points)
+  MENU SECTION — list of TouchableOpacity rows, white card, divider lines:
+    📍  عناويني           → /(buyer)/address
+    🛒  طلباتي السابقة     → /(buyer)/orders
+    🌳  أشجاري المتبناة    → /(buyer)/trees (focuses adopted tab)
+    🔔  إشعاراتي          → /(buyer)/alerts
+    ⚙️  الإعدادات         → /(buyer)/settings
+    ❓  المساعدة          (alert dialog with support email)
+  Logout button at the very bottom (outlined red, full-width)
+Edit mode: same layout but the name / phone / city become TextInputs and the
+"Save" Button replaces the "Edit" link.
+
+────  3.17  /(buyer)/address.tsx   ────
+Card with dropdown of 14 cities, street TextInput, additional-details
+multiline TextInput. Primary "حفظ العنوان" Button.
+
+────  3.18  /(buyer)/settings.tsx   ────
+City dropdown + WhatsApp phone TextInput + notification Switch.
+"حفظ الإعدادات" primary Button.
+
+────  3.19  /(buyer)/alerts.tsx   ────
+List of notification cards. Each: icon + title + body + relative time +
+read indicator (unread = bold + small dot on left). Tap navigates to the
+linked screen (order / message / promo).
+
+
+────────────────────────────────────────────────────────────────────────────────
+4.  FARMER GROUP   /(farmer)   —   bottom-tab navigator (5 tabs)
+────────────────────────────────────────────────────────────────────────────────
+
+Tab bar (same style as buyer):
+  index    home-outline       "الرئيسية"
+  products cube-outline       "منتجاتي"
+  orders   bag-outline        "طلباتي"
+  chat     chatbubble-out     "دردشاتي"
+  profile  person-outline     "حسابي"
+
+Hidden routes:
+  add-product, flash-deal, analytics, alerts, trees, pick-requests,
+  chat-thread/[id], earnings, messages, messages/[buyerId]
+
+────  4.1  /(farmer)/index.tsx   "الرئيسية"  (dashboard)  ────
+ScrollView:
+
+  Header: time-aware greeting "صباح الخير، {ownerName}" + bell icon
+          (badge with unread alerts) → /(farmer)/alerts
+
+  AI REVENUE FORECAST BANNER  (rendered only when AI service reachable)
+    Purple #F3E8FF card, padding 16, row-reverse:
+      Right: "توقع اليوم بالذكاء الاصطناعي" muted purple title
+             Big bold "₪{estimated_daily_revenue.toFixed(0)} / يوم"
+      Left:  white pill "✨ AI"
+
+  METRICS ROW — 3 cards side-by-side:
+    Today orders count
+    Pending orders count (gold)
+    Month revenue total
+
+  SMART ALERTS section
+    Title "تنبيهات ذكية"
+    AI alerts first (purple-bordered): sparkles icon + alert text +
+      "تنبيه ذكي" purple label
+    Then low-stock alerts (gold-bordered): warning icon + "{name} -
+      الكمية المتبقية: {qty} {unit}" + "مخزون منخفض" label
+    Pending orders alert if any
+    Empty: green checkmark + "لا توجد تنبيهات حالياً"
+
+  ACTIONS GRID — 2×2 of square QuickActionCards:
+    [+ إضافة منتج]   → /(farmer)/add-product   (primary green big card)
+    [⚡ عرض سريع]    → /(farmer)/flash-deal
+    [📊 إحصائيات]   → /(farmer)/analytics
+    [🌳 أشجار]      → /(farmer)/trees
+
+────  4.2  /(farmer)/add-product.tsx   ────
+Header: back arrow + "إضافة منتج" / "تعديل المنتج"
+Top of scroll: VOICE-INPUT CARD (light-green #E8F5E1, rounded, mx-padded):
+  Right column: "إضافة بالصوت" (Bold 15) + voiceStatus subtitle (changes
+    between "اضغط للتحدث" → "جاري التسجيل... اضغط لإيقاف" → "جاري التحويل
+    لنص..." → "جاري الفهم..." → "اضغط للتحدث")
+  Left: round 52px green mic button (red while recording, with pulse
+    animation scale 1.0→1.3 looping). Tap to record, tap to stop.
+    Sends audio to /api/voice/transcribe → /api/voice/parse-product →
+    auto-fills name/retail_price/wholesale_price/quantity.
+
+Form (below):
+  • Image picker tile — full-width dashed cream tile 180px tall. Either shows
+    preview image or "📷 إضافة صورة" placeholder. Tap → camera/gallery sheet.
+  • Input "اسم المنتج"
+  • Two-column row: unit chips (4 chips: كغ / ليتر / حبة / طرد) + quantity
+    TextInput
+  • Sale type chips: 3 chips (مفرق / جملة / كلاهما)
+  • Two prices row: wholesale_price + retail_price
+  • Discount % TextInput
+  • Organic toggle — pill switch (off=gray bg, on=green bg, thumb 24px)
+  • Multiline description
+  • Primary full-width "نشر المنتج" / "حفظ التعديلات" Button (loading state)
+
+────  4.3  /(farmer)/products.tsx   "منتجاتي"   ────
+FAB top-right: "+ إضافة منتج" pill → /(farmer)/add-product
+FlatList of product rows:
+  Row card (row-reverse):
+    100×100 image
+    Right column:
+      Bold name + small category chip
+      Price row: retail + wholesale + discount % if any
+      "📦 {quantity_available} {unit} متوفر"
+    Left: column of round icon buttons:
+      ✏️ edit → /(farmer)/add-product?editId={id}&...prefilled
+      🗑 delete (red) — confirm-alert
+    Switch row at bottom: "متوفر" toggle (updates is_available)
+In dev mode merges devProductsStore.created at the top of the list.
+
+────  4.4  /(farmer)/orders.tsx   "طلباتي"   ────
+Top: 4 segmented tabs: جديدة / جارية / مكتملة / مرفوضة
+FlatList of order cards:
+  Card (white, rounded-12, padding 14):
+    Header row: status pill (color-coded) + order id + relative time
+    Body: buyer avatar + buyer name + phone "اتصل" small icon button
+    Items list (max 3, "{name} ×{qty}")
+    Address row: 📍 delivery_address
+    Total bottom: big "{total_price} د.أ"
+    Action row (only on "جديدة" tab):
+      Primary "✅ قبول" + outlined-red "❌ رفض"
+    Action row (on "جارية"): a "تحديث الحالة" Button cycles through
+      preparing → out_for_delivery → delivered
+Realtime: subscribes to postgres_changes on `orders` table for new INSERTs
+(skipped in dev mode — uses zustand subscription instead).
+
+────  4.5  /(farmer)/earnings.tsx   ────
+Header: back arrow + "الأرباح"
+Period chips: اليوم / الأسبوع / الشهر
+Big metric card: total earnings for period (bold 36px)
+EarningsChart component (custom simple bar chart):
+  7 bars (days of week) or month days. Each bar height = revenue.
+Transaction list below: order id + buyer name + amount + date.
+
+────  4.6  /(farmer)/alerts.tsx   ────
+List of MetricCard-style alert rows:
+  Warning (mustard): "X كيلو {product} لم تُبع — فكّر بعرض سريع"
+  Info (sky): "سعر {crop} في السوق انخفض 12% — عدّل سعرك"
+  Success (green): "تم بيع 5 كيلو {product} اليوم!"
+Tap → opens linked action (flash-deal / products / orders).
+
+────  4.7  /(farmer)/analytics.tsx   ────
+Top metrics row: total revenue / orders / avg order value
+Best-selling products list (sorted by qty sold)
+Customer-by-city pie chart (custom SVG)
+Order-status breakdown (donut)
+
+────  4.8  /(farmer)/flash-deal.tsx   ────
+Header + outlined "Cancel"
+Product picker (carousel of own products) — selected card grows
+Original-price display + slider for new price (or numeric input)
+Live "you save {%}" badge
+Time-window chips: 1h / 3h / 6h / 24h
+Primary full-width "نشر العرض" Button — turns into a green success state with
+checkmark on success.
+
+────  4.9  /(farmer)/trees.tsx   ────
+FAB top-right: "+ إضافة شجرة" toggles inline expandable form
+Form fields when expanded:
+  Image picker, tree type, suggested name, age (years), annual price (₪),
+  available count, production season, soil type, extra info.
+  "إضافة الشجرة" Button.
+Below form: FlatList of own trees (image + type + age + price + delete).
+
+────  4.10  /(farmer)/pick-requests.tsx   ────
+List of pick requests from buyers:
+  Card: buyer avatar + name + phone + product image/name + date/time +
+        quantity + status pill.
+  Two buttons on pending: "موافقة" / "رفض"
+  WhatsApp icon button to message the buyer directly.
+
+────  4.11  /(farmer)/chat.tsx   "دردشاتي"   ────
+Same as buyer's chat list but with no AI helper row (farmers don't get the
+chatbot in this build). Pencil icon top-left → /(farmer)/messages
+List of buyer conversations.
+
+────  4.12  /(farmer)/messages.tsx + messages/[buyerId].tsx   ────
+Same patterns as buyer messages screens, just buyer-named.
+
+────  4.13  /(farmer)/profile.tsx   "حسابي"   ────
+Hero section:
+  Edit-mode toggle (pencil icon top-right).
+  Round 100px avatar (tappable in edit mode to change)
+  Bold 22 owner_name
+  Muted "🏡 farm_name · city"
+  Verified checkmark badge if is_verified.
+About paragraph (TextInput in edit mode).
+Farm gallery — horizontal scroll of 80×80 images, tap to view full screen.
+Stats row: products count / total orders / avg rating.
+Menu rows:
+  📊 إحصائيات        → /(farmer)/analytics
+  💰 الأرباح          → /(farmer)/earnings
+  🌳 الأشجار          → /(farmer)/trees
+  🧺 طلبات القطف     → /(farmer)/pick-requests
+  ⚡ عرض سريع        → /(farmer)/flash-deal
+  ❓ المساعدة         (alert with support email)
+Logout button at the bottom.
+
+
+────────────────────────────────────────────────────────────────────────────────
+5.  AI HELPER MODAL  (shared, opens from chat tab + home FAB)
+────────────────────────────────────────────────────────────────────────────────
+
+components/buyer/AIHelperModal.tsx — full-screen modal that slides up.
+
+Header bar:
+  Close X (right)  +  Purple ✨ icon + "المساعد الذكي" (right-aligned)
+  "متصل بالخادم" green pill if AI service reachable; "وضع تجريبي" gold pill
+  if not.
+
+Messages FlatList (auto-scroll to bottom):
+  System welcome bubble (purple-tinted, full-width):
+    "أهلاً! كيف بأقدر أساعدك اليوم؟" + sample-question chips below it:
+      "أفضل سعر للبندورة اليوم؟"
+      "وين أقرب مزارع؟"
+      "كيف أتبنى شجرة؟"
+    Tap a chip → sends as the first user message.
+  User bubbles: aligned to flex-start (visually left in RTL), green bubble.
+  Assistant bubbles: aligned to flex-end (right), purple-tinted soft bubble.
+    If reply.transfer_to_whatsapp is true, an extra small button appears:
+      "تواصل عبر واتساب" → opens wa.me link.
+
+Bottom input bar (sticky):
+  Round purple send button + multiline TextInput "اكتب رسالتك..."
+  While waiting: spinner replaces the send icon.
+
+
+────────────────────────────────────────────────────────────────────────────────
+6.  AI SERVICE  (services/ai-service, FastAPI on Render)
+────────────────────────────────────────────────────────────────────────────────
+
+Nine endpoints, each with a DEMO fallback that returns sensible mock data
+when API keys aren't set, so the app never breaks:
+
+  POST  /api/ai/chat                       Claude (buyer/farmer assistant)
+  POST  /api/voice/transcribe              Azure Speech → text
+  POST  /api/voice/parse-product           Claude → structured Product fields
+  POST  /api/voice/parse-order             Claude → cart items list
+  GET   /api/maps/nearby-farmers           Haversine + Azure Maps travel-time
+  GET   /api/analytics/price-comparison    market price vs Fallahy + saving %
+  GET   /api/analytics/price-ticker        live day-over-day direction
+  GET   /api/analytics/price-trend         time-series for chart screens
+  GET   /api/analytics/farmer-dashboard    revenue forecast + smart_alerts
+
+Data files bundled with the service:
+  farmers.json   6 real Palestinian/Jordanian farmers with lat/lng
+  prices.json    14-day price history for 4 crops
+
+The React Native app talks to this service via lib/aiService.ts. Every UI
+that depends on it has a Supabase / mock fallback so the screen never goes
+blank when the service is down.
+
+
+────────────────────────────────────────────────────────────────────────────────
+7.  DATA STORES  (zustand)
+────────────────────────────────────────────────────────────────────────────────
+
+store/authStore.ts          user + role + isLoggedIn + login methods + logout
+store/cartStore.ts          items + addItem/removeItem/updateQty/getTotal
+store/messagesStore.ts      conversations dict (zustand-only, no DB)
+store/toastStore.ts         in-app toast queue
+store/userStore.ts          (legacy, unused)
+
+Dev-mode in-memory stores (active when EXPO_PUBLIC_DEV_MODE=true so demo
+flows work without real Supabase user rows):
+  store/devProductsStore.ts        created products + edit overrides
+  store/devFarmerTreesStore.ts     trees created by the dev farmer
+  store/devAdoptedTreesStore.ts    trees adopted by the dev buyer
+  store/devOrdersStore.ts          buyer-placed orders (cross-role visible)
+
+
+────────────────────────────────────────────────────────────────────────────────
+8.  REUSABLE UI COMPONENTS
+────────────────────────────────────────────────────────────────────────────────
+
+components/ui/Button.tsx       primary / outlined / ghost; sm/md/lg sizes;
+                               fullWidth; loading spinner; icon support
+components/ui/Input.tsx        labelled TextInput, RTL-aware, error state
+components/ui/Avatar.tsx       round image with person-icon placeholder when
+                               uri missing/short
+components/ui/Badge.tsx        small status pill (variants: verified, fresh,
+                               savings, organic, …)
+components/ui/Card.tsx         white rounded surface with shadow
+components/ui/Divider.tsx
+components/ui/QuantityStepper.tsx     - / number / + row
+components/ui/RatingStars.tsx         5 stars + count
+components/ui/Toast.tsx + ToastHost   bottom-toast container
+components/ui/BottomSheet.tsx
+components/ui/PriceTag.tsx     market-vs-fallahy strikethrough display
+
+components/buyer/AIHelperModal.tsx    described above
+components/buyer/CategoryFilter.tsx   round icon+label chips horizontal scroll
+components/buyer/HeroBanner.tsx       (orphan in current build — buyer home
+                                       inlines its own hero)
+components/buyer/OrderStatusStep.tsx  one row of the tracking stepper
+components/buyer/SectionHeader.tsx    "title  +  see-all-link" row
+
+components/farmer/EarningsChart.tsx   simple bar chart
+components/farmer/MetricCard.tsx      icon + value + label tile
+components/farmer/QuickActionCard.tsx square colored action tile
+
+
+────────────────────────────────────────────────────────────────────────────────
+9.  GLOBAL UX NOTES
+────────────────────────────────────────────────────────────────────────────────
+
+• Everything is RTL. Buttons read right-to-left, lists flow right-to-left,
+  back arrows point right (arrow-forward Ionicon) because tapping it returns
+  you "forward in your reading direction".
+
+• Loading uses a centered ActivityIndicator in primary color. Lists never show
+  blocking spinners — sections render their shell immediately and the section
+  shows its own small loader while data lands.
+
+• Empty states are friendly: muted Ionicon (40-48px) + Arabic message + a
+  CTA button when there's a logical next action.
+
+• Errors surface real Supabase/AI error messages instead of generic Arabic
+  strings — easier to debug, easier to demo.
+
+• Every screen that writes data has a dev-mode branch that mutates a local
+  zustand store instead, so the demo never hits a foreign-key violation from
+  the fake dev user UUIDs.
+
+• Native splash is hidden as soon as the JS renders (no font-load wait) so the
+  app never appears frozen. The first-render path has a 1.5s safety ceiling
+  on the loading spinner.
+
+• Network calls have built-in timeouts: 4s for auth session, 3s for individual
+  Supabase queries on the launch path, 5s per section on the buyer home.
+  React Query is configured with retry: 1 and 500ms backoff so failures are
+  fast.
+
+
+================================================================================
+  END
+================================================================================
