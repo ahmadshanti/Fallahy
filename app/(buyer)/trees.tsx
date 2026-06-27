@@ -17,9 +17,13 @@ import { colors } from '../../constants/colors';
 import { useAuthStore } from '../../store/authStore';
 import { getAllTrees, adoptTree, getAdoptedTreesByBuyer } from '../../lib/trees';
 import { Tree, AdoptedTree } from '../../types';
+import { isDevMode } from '../../lib/devMode';
+import { useDevAdoptedTreesStore } from '../../store/devAdoptedTreesStore';
 
 export default function TreesScreen() {
   const { buyerId } = useAuthStore();
+  const devAdopted = useDevAdoptedTreesStore((s) => s.adopted);
+  const adoptInDevStore = useDevAdoptedTreesStore((s) => s.adopt);
 
   const [activeTab, setActiveTab] = useState<'available' | 'adopted'>('available');
   const [trees, setTrees] = useState<Tree[]>([]);
@@ -39,7 +43,9 @@ export default function TreesScreen() {
       setLoading(true);
       const [allTrees, adopted] = await Promise.all([
         getAllTrees(),
-        buyerId ? getAdoptedTreesByBuyer(buyerId) : Promise.resolve([]),
+        // In dev mode the buyer doesn't exist in the users table, so skip the
+        // DB query (it would 200 with [] anyway under RLS, but cleaner this way).
+        buyerId && !isDevMode ? getAdoptedTreesByBuyer(buyerId) : Promise.resolve([]),
       ]);
       setTrees(allTrees);
       setAdoptedTrees(adopted);
@@ -49,6 +55,9 @@ export default function TreesScreen() {
       setLoading(false);
     }
   };
+
+  // Merge DB-adopted with dev-store-adopted so the "أشجاري المتبناة" tab shows both
+  const visibleAdopted = isDevMode ? [...devAdopted, ...adoptedTrees] : adoptedTrees;
 
   const handleAdoptPress = (tree: Tree) => {
     if (!buyerId) {
@@ -69,11 +78,18 @@ export default function TreesScreen() {
     try {
       setAdoptingId(selectedTree.id);
       setShowModal(false);
-      await adoptTree(selectedTree.id, buyerId, customName.trim());
+      if (isDevMode) {
+        // Save to local zustand store — DB write would fail because the dev
+        // buyer UUID isn't a real row in the users table (FK constraint).
+        adoptInDevStore(selectedTree, buyerId, customName.trim());
+      } else {
+        await adoptTree(selectedTree.id, buyerId, customName.trim());
+        await loadData();
+      }
       Alert.alert('تم التبني', `تم تبني شجرة "${customName.trim()}" بنجاح`);
-      await loadData();
-    } catch (err) {
-      Alert.alert('خطأ', 'تعذر تبني الشجرة');
+    } catch (err: any) {
+      console.error('Adopt tree failed:', err);
+      Alert.alert('خطأ', err?.message || err?.toString() || 'تعذر تبني الشجرة');
     } finally {
       setAdoptingId(null);
       setSelectedTree(null);
@@ -217,7 +233,7 @@ export default function TreesScreen() {
             contentContainerStyle={styles.listContent}
           />
         )
-      ) : adoptedTrees.length === 0 ? (
+      ) : visibleAdopted.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="heart-outline" size={48} color={colors.textMuted} />
           <Text style={styles.emptyText}>لم تتبنَّ أي شجرة بعد</Text>
@@ -230,7 +246,7 @@ export default function TreesScreen() {
         </View>
       ) : (
         <FlatList
-          data={adoptedTrees}
+          data={visibleAdopted}
           renderItem={renderAdoptedCard}
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
