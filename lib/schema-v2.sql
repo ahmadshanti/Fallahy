@@ -1,4 +1,4 @@
--- Fallahy v2 Database Schema
+-- من الأرض (From The Land) v2 Database Schema
 -- Run in Supabase SQL Editor
 
 -- Drop old tables if they exist (careful in production!)

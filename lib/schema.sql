@@ -1,4 +1,4 @@
--- Fallahy Database Schema
+-- من الأرض (From The Land) Database Schema
 -- Run this in Supabase SQL Editor (Dashboard → SQL Editor → New Query)
 
 -- 1. Profiles table (extends auth.users)

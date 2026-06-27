@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../../components/ui/Button';
@@ -13,9 +12,11 @@ export default function RoleSelectScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <View style={styles.iconContainer}>
-          <Ionicons name="leaf" size={60} color={colors.primary} />
-        </View>
+        <Image
+          source={require('../../assets/icon.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
         <Text style={styles.title}>أهلاً بك في من الأرض</Text>
         <Text style={styles.subtitle}>من الأرض لبيتك مباشرة</Text>
       </View>
@@ -51,14 +52,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
   },
-  iconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#E8F5E1',
-    alignItems: 'center',
-    justifyContent: 'center',
+  logo: {
+    width: 180,
+    height: 180,
     marginBottom: spacing.lg,
+    borderRadius: 24,
   },
   title: {
     fontFamily: 'Cairo_700Bold',
