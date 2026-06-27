@@ -14,24 +14,24 @@ function transformProduct(row: any) {
     id: row.id,
     name: row.name,
     farmerId: row.farmer_id,
-    farmerName: row.profiles?.name || '',
-    farmerAvatar: row.profiles?.avatar_url || '',
+    farmerName: row.farmers?.farm_name || '',
+    farmerAvatar: row.farmers?.owner_avatar_url || '',
     image: row.image_url || '',
-    retailPrice: Number(row.retail_price),
-    wholesalePrice: Number(row.wholesale_price),
-    marketPrice: Number(row.market_price),
+    retailPrice: Number(row.retail_price ?? 0),
+    wholesalePrice: Number(row.wholesale_price ?? 0),
+    marketPrice: Number(row.market_price ?? 0),
     unit: row.unit,
-    available: row.available,
+    available: row.quantity_available ?? 0,
     harvestDate: row.harvest_date || '',
-    isOrganic: row.is_organic,
-    isFresh: row.is_fresh,
-    origin: row.origin,
+    isOrganic: !!row.is_organic,
+    isFresh: !!row.is_fresh,
+    origin: row.origin || '',
     rating: 0,
     reviewCount: 0,
-    category: row.category,
-    savings: row.savings_percent || 0,
-    isSelfPick: row.is_self_pick,
-    isAdoptable: row.is_adoptable,
+    category: row.category || '',
+    savings: row.savings_percent || row.discount_percent || 0,
+    isSelfPick: !!row.is_self_pick,
+    isAdoptable: !!row.is_adoptable,
   };
 }
 
@@ -41,8 +41,8 @@ export function useProducts(filters?: ProductFilters) {
     queryFn: async () => {
       let query = supabase
         .from('products')
-        .select('*, profiles!farmer_id(name, avatar_url, is_verified)')
-        .gt('available', 0)
+        .select('*, farmers!farmer_id(farm_name, owner_avatar_url, is_verified)')
+        .eq('is_available', true)
         .order('created_at', { ascending: false });
 
       if (filters?.category && filters.category !== 'الكل') {
@@ -71,7 +71,7 @@ export function useProduct(id: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('*, profiles!farmer_id(name, avatar_url, is_verified)')
+        .select('*, farmers!farmer_id(farm_name, owner_avatar_url, is_verified)')
         .eq('id', id)
         .single();
       if (error) throw error;
@@ -87,7 +87,7 @@ export function useFarmerProducts(farmerId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('*, profiles!farmer_id(name, avatar_url, is_verified)')
+        .select('*, farmers!farmer_id(farm_name, owner_avatar_url, is_verified)')
         .eq('farmer_id', farmerId)
         .order('created_at', { ascending: false });
       if (error) throw error;

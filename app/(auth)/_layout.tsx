@@ -9,6 +9,7 @@ export default function AuthLayout() {
       <Stack.Screen name="login" />
       <Stack.Screen name="register-buyer" />
       <Stack.Screen name="register-farmer" />
+      <Stack.Screen name="dev-role" />
     </Stack>
   );
 }

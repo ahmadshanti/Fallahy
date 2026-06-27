@@ -56,14 +56,10 @@ export default function FarmerProfileScreen() {
     }
   };
 
-  const handleChat = async () => {
-    if (!buyerId || !farmer) return;
-    try {
-      const conv = await getOrCreateConversation(buyerId, farmer.id);
-      router.push(`/(buyer)/chat-thread/${conv.id}`);
-    } catch (err) {
-      Alert.alert('خطأ', 'تعذر بدء المحادثة');
-    }
+  const handleChat = () => {
+    if (!farmer) return;
+    // New messaging system (uses zustand useMessagesStore — instant, no DB round-trip)
+    router.push(`/(buyer)/messages/${farmer.id}`);
   };
 
   const handleWhatsApp = () => {
